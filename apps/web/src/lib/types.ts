@@ -14,7 +14,7 @@ export interface UsuarioFila {
   activo: boolean;
   ultimo_acceso: string | null;
   created_at: string;
-  ubicaciones: { id: string; nombre: string }[];
+  ubicaciones: { id: string; nombre: string; empresa: { id: string; nombre: string } }[];
 }
 
 export interface Me {
@@ -25,7 +25,7 @@ export interface Me {
   rol: 'SUPER_ADMIN' | 'ADMIN' | 'OPERADOR' | 'CONSULTA';
   organizacion: { id: string; nombre: string; moneda_base: string };
   acceso_total: boolean;
-  ubicaciones: { id: string; nombre: string }[];
+  ubicaciones: { id: string; nombre: string; empresa: { id: string; nombre: string } }[];
 }
 
 export interface Saldo {
@@ -33,9 +33,17 @@ export interface Saldo {
   saldo: Dec;
 }
 
+export interface Empresa {
+  id: string;
+  nombre: string;
+  erp_empresa_id?: string | null;
+  activa?: boolean;
+}
+
 export interface Ubicacion {
   id: string;
   nombre: string;
+  empresa?: { id: string; nombre: string };
   tipo?: string | null;
   erp_ubicacion_id?: string | null;
   activa?: boolean;
@@ -54,7 +62,7 @@ export interface ErpLinkInfo {
 export interface Cliente {
   id: string;
   ubicacion_id: string;
-  ubicacion?: { id: string; nombre: string };
+  ubicacion?: { id: string; nombre: string; empresa?: { id: string; nombre: string } };
   nombre: string;
   apellidos: string | null;
   razon_social: string | null;
@@ -259,6 +267,8 @@ export interface ErpClienteItem {
   id: string;
   ubicacion_id: string;
   ubicacion: string;
+  empresa_id: string;
+  empresa: string;
   nombre: string;
   apellidos: string | null;
   razon_social: string | null;
@@ -301,7 +311,7 @@ export interface ReporteCredito {
     saldo_sin_ticket: number;
   };
   antiguedad: { key: string; label: string; saldo: number; tickets: number }[];
-  por_ubicacion: { id: string; nombre: string; vinculados: number; con_credito: number; tickets: number; saldo: number; saldo_erp: number; saldo_crm: number }[];
+  por_ubicacion: { id: string; nombre: string; empresa: string; vinculados: number; con_credito: number; tickets: number; saldo: number; saldo_erp: number; saldo_crm: number }[];
   top_deudores: FilaSaldo[];
   desincronizados: FilaSaldo[];
   sin_ticket: (FilaSaldo & { sin_ticket: number })[];

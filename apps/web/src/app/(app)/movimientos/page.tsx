@@ -8,7 +8,8 @@ import { Suspense, useState } from 'react';
 import { ESTATUS, TIPOS_MOVIMIENTO, TIPO_LABEL } from '@micsys-crm/shared';
 import { api, descargar } from '@/lib/api';
 import { formatMoney, num, simboloMoneda } from '@/lib/format';
-import { useCuentasDestino, useDebounced, useUbicaciones } from '@/lib/hooks';
+import { useCuentasDestino, useDebounced } from '@/lib/hooks';
+import { FiltroUbicacionChips, useFiltroUbicacion } from '@/components/filtro-ubicacion';
 import type { MovimientosPage } from '@/lib/types';
 import { MovimientosTable } from '@/components/movimientos-table';
 import { CurrencyChip } from '@/components/ui/badges';
@@ -25,7 +26,6 @@ function Contenido() {
     estatus: sp.get('estatus') ?? '',
     tipo: '',
     cuenta_destino_id: sp.get('cuenta_destino_id') ?? '',
-    ubicacion_id: '',
     desde: '',
     hasta: '',
     cliente_id: sp.get('cliente_id') ?? '',
@@ -34,9 +34,9 @@ function Contenido() {
   const [page, setPage] = useState(1);
   const busqueda = useDebounced(q.trim(), 300);
   const cuentas = useCuentasDestino();
-  const ubicaciones = useUbicaciones();
+  const fu = useFiltroUbicacion();
 
-  const params = { ...f, q: busqueda, page, limit: 25 };
+  const params = { ...f, ...fu.params, q: busqueda, page, limit: 25 };
   const { data, isLoading, error } = useQuery({
     queryKey: ['movimientos', params],
     queryFn: () => api<MovimientosPage>('/movimientos', { params }),
@@ -47,7 +47,7 @@ function Contenido() {
     setF((s) => ({ ...s, [k]: e.target.value }));
     setPage(1);
   };
-  const hayFiltros = Object.values(f).some(Boolean) || !!busqueda;
+  const hayFiltros = Object.values(f).some(Boolean) || !!fu.empresa || !!fu.ubicacion || !!busqueda;
   const paginas = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
 
   return (
@@ -59,7 +59,7 @@ function Contenido() {
           <>
             <Button
               variant="outline"
-              onClick={() => descargar('/movimientos/export.csv', { ...f, q: busqueda }, 'movimientos.csv').catch((e: Error) => toast.error(e.message))}
+              onClick={() => descargar('/movimientos/export.csv', { ...f, ...fu.params, q: busqueda }, 'movimientos.csv').catch((e: Error) => toast.error(e.message))}
             >
               <Download className="size-4" strokeWidth={1.75} />
               Exportar CSV
@@ -99,12 +99,7 @@ function Contenido() {
             {cuentas.data?.map((c) => <option key={c.id} value={c.id}>{c.alias}</option>)}
           </select>
         </FilterChip>
-        <FilterChip label="Ubicación" active={!!f.ubicacion_id}>
-          <select className={sel} value={f.ubicacion_id} onChange={cambiar('ubicacion_id')}>
-            <option value="">todas</option>
-            {ubicaciones.data?.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-          </select>
-        </FilterChip>
+        <FiltroUbicacionChips f={fu} onChange={() => setPage(1)} />
         <FilterChip label="Desde" active={!!f.desde}>
           <input type="date" className={sel} value={f.desde} onChange={cambiar('desde')} />
         </FilterChip>
@@ -112,7 +107,7 @@ function Contenido() {
           <input type="date" className={sel} value={f.hasta} onChange={cambiar('hasta')} />
         </FilterChip>
         {hayFiltros && (
-          <Button size="sm" variant="ghost" onClick={() => { setF({ estatus: '', tipo: '', cuenta_destino_id: '', ubicacion_id: '', desde: '', hasta: '', cliente_id: '' }); setQ(''); setPage(1); }}>
+          <Button size="sm" variant="ghost" onClick={() => { setF({ estatus: '', tipo: '', cuenta_destino_id: '', desde: '', hasta: '', cliente_id: '' }); fu.reset(); setQ(''); setPage(1); }}>
             <X className="size-3.5" />
             Limpiar
           </Button>

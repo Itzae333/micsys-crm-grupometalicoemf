@@ -26,6 +26,7 @@ export interface FiltrosMov {
   cliente_id?: string;
   cuenta_destino_id?: string;
   ubicacion_id?: string;
+  empresa_id?: string;
   estatus?: string;
   tipo?: string;
   metodo?: string;
@@ -47,7 +48,7 @@ export class MovimientosService {
   // ── Consulta ───────────────────────────────────────────────────────────
   private async where(u: AuthUser, f: FiltrosMov): Promise<Prisma.MovimientoWhereInput> {
     const w: Prisma.MovimientoWhereInput = { organizacion_id: u.organizacion_id };
-    const ub = await this.acceso.filtro(u, f.ubicacion_id);
+    const ub = await this.acceso.filtro(u, f.ubicacion_id, f.empresa_id);
     if (ub) w.ubicacion_id = ub;
     if (f.cliente_id) w.cliente_id = f.cliente_id;
     if (f.cuenta_destino_id) w.cuenta_destino_id = f.cuenta_destino_id;

@@ -42,7 +42,7 @@ export function ErpImportDialog({ open, onOpenChange }: { open: boolean; onOpenC
 
   const ubicaciones = useQuery({
     queryKey: ['erp-ubicaciones'],
-    queryFn: () => api<{ id: string; nombre: string }[]>('/erp/ubicaciones'),
+    queryFn: () => api<{ id: string; nombre: string; empresa: string }[]>('/erp/ubicaciones'),
     enabled: open,
   });
   const lista = useQuery({
@@ -99,7 +99,11 @@ export function ErpImportDialog({ open, onOpenChange }: { open: boolean; onOpenC
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Select className="w-auto min-w-[180px]" value={ubicacion} onChange={(e) => { setUbicacion(e.target.value); setPage(1); }} aria-label="Ubicación del ERP">
           <option value="">Todas las ubicaciones</option>
-          {ubicaciones.data?.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+          {[...new Set((ubicaciones.data ?? []).map((u) => u.empresa))].map((emp) => (
+            <optgroup key={emp} label={emp}>
+              {(ubicaciones.data ?? []).filter((u) => u.empresa === emp).map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+            </optgroup>
+          ))}
         </Select>
         <div className="relative min-w-[200px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -126,7 +130,7 @@ export function ErpImportDialog({ open, onOpenChange }: { open: boolean; onOpenC
                   <input type="checkbox" aria-label="Elegir todos los de esta página" checked={todosPagina} onChange={alternarPagina} disabled={seleccionables.length === 0} className="accent-[hsl(var(--primary))]" />
                 </th>
                 <th className="px-2 font-medium">Cliente</th>
-                <th className="px-2 font-medium max-md:hidden">Ubicación</th>
+                <th className="px-2 font-medium max-md:hidden">Empresa · ubicación</th>
                 <th className="px-2 font-medium max-md:hidden">RFC</th>
                 <th className="px-3 text-right font-medium">Saldo en el ERP</th>
               </tr>
@@ -144,7 +148,7 @@ export function ErpImportDialog({ open, onOpenChange }: { open: boolean; onOpenC
                       <div className="truncate font-medium">{nombreCliente(c)}</div>
                       {ya && <span className="text-xs text-success-text">Ya está en el CRM</span>}
                     </td>
-                    <td className="px-2 text-muted-foreground max-md:hidden">{c.ubicacion}</td>
+                    <td className="px-2 text-muted-foreground max-md:hidden">{c.empresa} · {c.ubicacion}</td>
                     <td className="num px-2 text-muted-foreground max-md:hidden">{c.rfc ?? '—'}</td>
                     <td className={cn('num px-3 text-right', num(c.saldo_pendiente) > 0 && 'font-medium')}>${formatMoney(num(c.saldo_pendiente))}</td>
                   </tr>

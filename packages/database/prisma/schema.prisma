@@ -29,6 +29,7 @@ model Organizacion {
   cuentas_destino CuentaDestino[]
   monedas         Moneda[]
   movimientos     Movimiento[]
+  empresas        Empresa[]
   ubicaciones     Ubicacion[]
 
   @@map("organizaciones")
@@ -64,11 +65,30 @@ model Usuario {
   @@map("usuarios")
 }
 
+// Empresas del grupo (EMFIMIFAR, Metálicos Lyeva, Láminas Monterrey…). Vienen del ERP o se crean a mano
+// (una empresa sin `erp_empresa_id` existe solo en el CRM). Las ubicaciones cuelgan de una empresa.
+model Empresa {
+  id              String   @id @default(cuid())
+  organizacion_id String
+  nombre          String
+  erp_empresa_id  String? // id de la empresa equivalente en el ERP
+  activa          Boolean  @default(true)
+  created_at      DateTime @default(now())
+
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  ubicaciones  Ubicacion[]
+
+  @@unique([organizacion_id, nombre])
+  @@unique([organizacion_id, erp_empresa_id])
+  @@map("empresas")
+}
+
 // Ubicaciones (Matriz, fábricas, puntos de venta). Misma estructura que el ERP:
-// los clientes y los movimientos van por ubicación.
+// Empresa -> Ubicaciones; los clientes y los movimientos van por ubicación.
 model Ubicacion {
   id               String   @id @default(cuid())
   organizacion_id  String
+  empresa_id       String
   nombre           String
   tipo             String? // MATRIZ | FABRICA | PUNTO_VENTA (informativo)
   erp_ubicacion_id String? // id de la ubicación equivalente en el ERP
@@ -76,11 +96,12 @@ model Ubicacion {
   created_at       DateTime @default(now())
 
   organizacion Organizacion       @relation(fields: [organizacion_id], references: [id])
+  empresa      Empresa            @relation(fields: [empresa_id], references: [id])
   clientes     Cliente[]
   movimientos  Movimiento[]
   usuarios     UsuarioUbicacion[]
 
-  @@unique([organizacion_id, nombre])
+  @@unique([empresa_id, nombre])
   @@unique([organizacion_id, erp_ubicacion_id])
   @@map("ubicaciones")
 }

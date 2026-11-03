@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { api } from '@/lib/api';
 import { compacto, fmtDiaCorto, fmtFecha, fmtFechaLarga, formatMoney, METODO_LABEL, nombreCliente } from '@/lib/format';
-import { useUbicaciones } from '@/lib/hooks';
+import { FiltroUbicacionChips, useFiltroUbicacion } from '@/components/filtro-ubicacion';
 import type { Dashboard } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { BarSeries, HBarList, ShareBar, Sparkline } from '@/components/charts/charts';
@@ -54,12 +54,11 @@ function Kpi({
 }
 
 export default function DashboardPage() {
-  const [ubicacion, setUbicacion] = useState('');
   const [dias, setDias] = useState(14);
-  const ubicaciones = useUbicaciones();
+  const f = useFiltroUbicacion();
   const { data, isLoading, error } = useQuery({
-    queryKey: ['dashboard', ubicacion, dias],
-    queryFn: () => api<Dashboard>('/dashboard', { params: { ubicacion_id: ubicacion, dias } }),
+    queryKey: ['dashboard', f.empresa, f.ubicacion, dias],
+    queryFn: () => api<Dashboard>('/dashboard', { params: { ...f.params, dias } }),
     refetchInterval: 60_000,
   });
 
@@ -82,20 +81,40 @@ export default function DashboardPage() {
         }
       />
 
-      {/* Filtro por empresa del grupo */}
+      {/* Filtro: empresa (si hay varias) y, debajo, sus ubicaciones */}
+      {f.variasEmpresas && (
+        <div className="-mx-4 mb-2 flex gap-1.5 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0" role="tablist" aria-label="Empresa">
+          {[{ id: '', nombre: 'Todas las empresas' }, ...f.empresas].map((e) => (
+            <button
+              key={e.id}
+              role="tab"
+              aria-selected={f.empresa === e.id}
+              onClick={() => f.setEmpresa(e.id)}
+              className={cn(
+                'h-8 shrink-0 rounded-md border px-3 text-[13px] font-medium transition-colors max-md:h-10',
+                f.empresa === e.id ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-card hover:bg-accent',
+              )}
+            >
+              {e.nombre}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="-mx-4 mb-5 flex gap-1.5 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0" role="tablist" aria-label="Ubicación">
-        {[{ id: '', nombre: 'Todas las ubicaciones' }, ...(ubicaciones.data ?? [])].map((e) => (
+        {[{ id: '', nombre: 'Todas las ubicaciones' }, ...f.ubicaciones].map((e) => (
           <button
             key={e.id}
             role="tab"
-            aria-selected={ubicacion === e.id}
-            onClick={() => setUbicacion(e.id)}
+            aria-selected={f.ubicacion === e.id}
+            onClick={() => f.setUbicacion(e.id)}
             className={cn(
               'h-8 shrink-0 rounded-md border px-3 text-[13px] transition-colors max-md:h-10',
-              ubicacion === e.id ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-card hover:bg-accent',
+              f.ubicacion === e.id ? 'border-primary/40 bg-accent font-medium text-accent-foreground' : 'border-input bg-card hover:bg-accent',
             )}
           >
-            {e.nombre}
+            {f.variasEmpresas && !f.empresa && (e as { empresa?: { nombre: string } }).empresa
+              ? `${(e as { empresa: { nombre: string } }).empresa.nombre} · ${e.nombre}`
+              : e.nombre}
           </button>
         ))}
       </div>

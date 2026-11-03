@@ -12,6 +12,32 @@ export class CatalogosService {
     private acceso: AccesoService,
   ) {}
 
+  // ── Empresas ───────────────────────────────────────────────────────────
+  empresas(u: AuthUser) {
+    return this.acceso.empresas(u);
+  }
+
+  async crearEmpresa(u: AuthUser, dto: { nombre: string }) {
+    const existe = await this.prisma.empresa.findFirst({
+      where: { organizacion_id: u.organizacion_id, nombre: { equals: dto.nombre, mode: 'insensitive' } },
+    });
+    if (existe) throw new BadRequestException(`Ya existe una empresa llamada "${existe.nombre}".`);
+    const e = await this.prisma.empresa.create({ data: { organizacion_id: u.organizacion_id, nombre: dto.nombre } });
+    await this.audit(u, 'Empresa', e.id, 'CREATE', null, e);
+    return e;
+  }
+
+  async actualizarEmpresa(u: AuthUser, id: string, dto: { nombre?: string; activa?: boolean }) {
+    const antes = await this.prisma.empresa.findFirst({ where: { id, organizacion_id: u.organizacion_id } });
+    if (!antes) throw new NotFoundException('Empresa no encontrada');
+    const e = await this.prisma.empresa.update({
+      where: { id },
+      data: { ...(dto.nombre ? { nombre: dto.nombre } : {}), ...(dto.activa !== undefined ? { activa: dto.activa } : {}) },
+    });
+    await this.audit(u, 'Empresa', id, 'UPDATE', antes, e);
+    return e;
+  }
+
   // ── Ubicaciones ────────────────────────────────────────────────────────
   async ubicaciones(u: AuthUser, todas = false) {
     const ids = await this.acceso.ids(u);
@@ -21,18 +47,21 @@ export class CatalogosService {
         ...(todas ? {} : { activa: true }),
         ...(ids ? { id: { in: ids } } : {}),
       },
-      orderBy: { nombre: 'asc' },
-      include: { _count: { select: { clientes: true } } },
+      orderBy: [{ empresa: { nombre: 'asc' } }, { nombre: 'asc' }],
+      include: { empresa: { select: { id: true, nombre: true } }, _count: { select: { clientes: true } } },
     });
   }
 
-  async crearUbicacion(u: AuthUser, dto: { nombre: string; tipo?: string | null }) {
+  async crearUbicacion(u: AuthUser, dto: { empresa_id: string; nombre: string; tipo?: string | null }) {
+    const empresa = await this.prisma.empresa.findFirst({ where: { id: dto.empresa_id, organizacion_id: u.organizacion_id } });
+    if (!empresa) throw new BadRequestException('La empresa elegida no existe.');
     const existe = await this.prisma.ubicacion.findFirst({
-      where: { organizacion_id: u.organizacion_id, nombre: { equals: dto.nombre, mode: 'insensitive' } },
+      where: { empresa_id: empresa.id, nombre: { equals: dto.nombre, mode: 'insensitive' } },
     });
-    if (existe) throw new BadRequestException(`Ya existe una ubicación llamada "${existe.nombre}".`);
+    if (existe) throw new BadRequestException(`${empresa.nombre} ya tiene una ubicación llamada "${existe.nombre}".`);
     const ub = await this.prisma.ubicacion.create({
-      data: { organizacion_id: u.organizacion_id, nombre: dto.nombre, tipo: dto.tipo ?? null },
+      data: { organizacion_id: u.organizacion_id, empresa_id: empresa.id, nombre: dto.nombre, tipo: dto.tipo ?? null },
+      include: { empresa: { select: { id: true, nombre: true } } },
     });
     await this.audit(u, 'Ubicacion', ub.id, 'CREATE', null, ub);
     return ub;

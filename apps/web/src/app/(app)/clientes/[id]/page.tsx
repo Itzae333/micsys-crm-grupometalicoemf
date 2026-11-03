@@ -43,7 +43,7 @@ export default function ClienteFicha() {
         title={nombreCliente(c)}
         subtitle={
           <span className="not-italic">
-            {[c.ubicacion?.nombre, c.rfc, c.telefono, c.email].filter(Boolean).join(' · ') || 'Sin datos de contacto'}
+            {[c.ubicacion?.empresa?.nombre, c.ubicacion?.nombre, c.rfc, c.telefono, c.email].filter(Boolean).join(' · ') || 'Sin datos de contacto'}
           </span>
         }
         actions={

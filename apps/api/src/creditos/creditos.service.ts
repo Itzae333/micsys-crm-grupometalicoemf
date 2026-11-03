@@ -17,6 +17,7 @@ export const SIN_COBRO = ['REABIERTA'];
 
 export interface FiltrosTickets {
   ubicacion_id?: string;
+  empresa_id?: string;
   cliente_id?: string;
   estado?: string; // abiertos | vencidos | liquidados | todos
   q?: string;
@@ -33,7 +34,7 @@ export class CreditosService {
 
   /** Alcance (organización, ubicaciones, cliente, búsqueda) sin el estado. */
   private async base(u: AuthUser, f: FiltrosTickets): Promise<Prisma.ErpTicketWhereInput> {
-    const ub = await this.acceso.filtro(u, f.ubicacion_id);
+    const ub = await this.acceso.filtro(u, f.ubicacion_id, f.empresa_id);
     const w: Prisma.ErpTicketWhereInput = {
       cliente: { organizacion_id: u.organizacion_id, ...(ub ? { ubicacion_id: ub } : {}) },
       ...(f.cliente_id ? { cliente_id: f.cliente_id } : {}),
@@ -80,7 +81,7 @@ export class CreditosService {
       this.prisma.erpTicket.findMany({
         where,
         include: {
-          cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true, ubicacion: { select: { id: true, nombre: true } } } },
+          cliente: { select: { id: true, nombre: true, apellidos: true, razon_social: true, ubicacion: { select: { id: true, nombre: true, empresa: { select: { nombre: true } } } } } },
         },
         orderBy: f.estado === 'vencidos' || (f.estado ?? 'abiertos') === 'abiertos' ? [{ vence: { sort: 'asc', nulls: 'last' } }, { folio: 'asc' }] : [{ fecha: 'desc' }],
         skip: (page - 1) * limit,

@@ -15,11 +15,11 @@ export class ClientesService {
 
   async listar(
     u: AuthUser,
-    q: { q?: string; activo?: string; page?: string; limit?: string; con_saldo?: string; ubicacion_id?: string; origen?: string },
+    q: { q?: string; activo?: string; page?: string; limit?: string; con_saldo?: string; ubicacion_id?: string; empresa_id?: string; origen?: string },
   ) {
     const page = Math.max(1, Number(q.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(q.limit) || 25));
-    const ubicacion_id = await this.acceso.filtro(u, q.ubicacion_id);
+    const ubicacion_id = await this.acceso.filtro(u, q.ubicacion_id, q.empresa_id);
     const where: Record<string, unknown> = { organizacion_id: u.organizacion_id, ...(ubicacion_id ? { ubicacion_id } : {}) };
     if (q.activo === 'true') where.activo = true;
     if (q.activo === 'false') where.activo = false;
@@ -45,7 +45,7 @@ export class ClientesService {
         take: limit,
         include: {
           saldos: true,
-          ubicacion: { select: { id: true, nombre: true } },
+          ubicacion: { select: { id: true, nombre: true, empresa: { select: { id: true, nombre: true } } } },
           erp_link: { select: { erp_cliente_id: true, saldo_erp: true, saldo_erp_at: true, saldo_sincronizado_at: true } },
           _count: { select: { movimientos: true } },
         },
@@ -59,7 +59,7 @@ export class ClientesService {
       cuentas: { orderBy: { created_at: 'desc' as const } },
       saldos: true,
       erp_link: true,
-      ubicacion: { select: { id: true, nombre: true } },
+      ubicacion: { select: { id: true, nombre: true, empresa: { select: { id: true, nombre: true } } } },
     });
 
     const base = { cliente_id: id, estatus: 'CONFIRMADO' as const, tipo: { in: [...TIPOS_INGRESO] } };

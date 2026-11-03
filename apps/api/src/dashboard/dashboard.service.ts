@@ -18,7 +18,7 @@ export class DashboardService {
     private acceso: AccesoService,
   ) {}
 
-  async resumen(u: AuthUser, q: { ubicacion_id?: string; dias?: string }) {
+  async resumen(u: AuthUser, q: { ubicacion_id?: string; empresa_id?: string; dias?: string }) {
     const org = u.organizacion_id;
     const dias = Math.min(90, Math.max(7, Number(q.dias) || 14));
     const ahora = new Date();
@@ -28,7 +28,7 @@ export class DashboardService {
     const mesPrevMismoPunto = new Date(mesPrevInicio.getTime() + (ahora.getTime() - mes.getTime()));
     const desdeSerie = sumarDias(hoy, -(dias - 1));
 
-    const ubFiltro = await this.acceso.filtro(u, q.ubicacion_id);
+    const ubFiltro = await this.acceso.filtro(u, q.ubicacion_id, q.empresa_id);
     const base: Prisma.MovimientoWhereInput = {
       organizacion_id: org,
       ...(ubFiltro ? { ubicacion_id: ubFiltro } : {}),
@@ -226,7 +226,7 @@ export class DashboardController {
   constructor(private svc: DashboardService) {}
 
   @Get()
-  resumen(@CurrentUser() u: AuthUser, @Query() q: { ubicacion_id?: string; dias?: string }) {
+  resumen(@CurrentUser() u: AuthUser, @Query() q: { ubicacion_id?: string; empresa_id?: string; dias?: string }) {
     return this.svc.resumen(u, q);
   }
 }

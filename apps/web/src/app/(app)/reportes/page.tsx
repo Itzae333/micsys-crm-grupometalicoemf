@@ -8,7 +8,7 @@ import { TIPO_LABEL } from '@micsys-crm/shared';
 import type { TipoMovimiento } from '@micsys-crm/shared';
 import { api } from '@/lib/api';
 import { fmtDiaCorto, fmtFecha, fmtMonto, formatMoney, haceCuanto } from '@/lib/format';
-import { useUbicaciones } from '@/lib/hooks';
+import { FiltroUbicacionChips, useFiltroUbicacion } from '@/components/filtro-ubicacion';
 import type { ReporteCobranza, ReporteCredito } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { BarSeries, HBarList } from '@/components/charts/charts';
@@ -28,8 +28,7 @@ const COLOR_ANTIGUEDAD: Record<string, string> = {
 
 export default function ReportesPage() {
   const [tab, setTab] = useState<'credito' | 'cobranza'>('credito');
-  const [ubicacion, setUbicacion] = useState('');
-  const ubicaciones = useUbicaciones();
+  const f = useFiltroUbicacion();
 
   return (
     <>
@@ -42,14 +41,11 @@ export default function ReportesPage() {
             </button>
           ))}
         </div>
-        <FilterChip label="Ubicación" active={!!ubicacion}>
-          <select className={sel} value={ubicacion} onChange={(e) => setUbicacion(e.target.value)}>
-            <option value="">todas</option>
-            {ubicaciones.data?.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-          </select>
-        </FilterChip>
+        <div className="flex flex-wrap items-center gap-2">
+          <FiltroUbicacionChips f={f} />
+        </div>
       </div>
-      {tab === 'credito' ? <Credito ubicacion={ubicacion} /> : <Cobranza ubicacion={ubicacion} />}
+      {tab === 'credito' ? <Credito ubicacion={f.ubicacion} empresa={f.empresa} /> : <Cobranza ubicacion={f.ubicacion} empresa={f.empresa} />}
     </>
   );
 }
@@ -65,13 +61,13 @@ function Kpi({ label, value, sub, tone }: { label: string; value: string; sub?: 
 }
 
 // ── Crédito ─────────────────────────────────────────────────────────────────
-function Credito({ ubicacion }: { ubicacion: string }) {
+function Credito({ ubicacion, empresa }: { ubicacion: string; empresa: string }) {
   const toast = useToast();
   const qc = useQueryClient();
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   const { data, isLoading, error } = useQuery({
-    queryKey: ['reportes', 'credito', ubicacion],
-    queryFn: () => api<ReporteCredito>('/reportes/credito', { params: { ubicacion_id: ubicacion } }),
+    queryKey: ['reportes', 'credito', empresa, ubicacion],
+    queryFn: () => api<ReporteCredito>('/reportes/credito', { params: { ubicacion_id: ubicacion, empresa_id: empresa } }),
   });
 
   const refrescar = () => {
@@ -225,7 +221,7 @@ function Credito({ ubicacion }: { ubicacion: string }) {
             <tbody>
               {data!.por_ubicacion.map((u) => (
                 <tr key={u.id} className="h-11 border-b last:border-0">
-                  <td className="px-4 font-medium">{u.nombre}</td>
+                  <td className="px-4"><div className="font-medium">{u.nombre}</div>{u.empresa && <div className="text-xs text-muted-foreground">{u.empresa}</div>}</td>
                   <td className="num px-2 text-right">{u.vinculados}</td>
                   <td className="num px-2 text-right">{u.con_credito}</td>
                   <td className="num px-2 text-right">{u.tickets}</td>
@@ -301,12 +297,12 @@ function hoy() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date());
 }
 
-function Cobranza({ ubicacion }: { ubicacion: string }) {
+function Cobranza({ ubicacion, empresa }: { ubicacion: string; empresa: string }) {
   const [desde, setDesde] = useState(inicioMes());
   const [hasta, setHasta] = useState(hoy());
   const { data, isLoading, error } = useQuery({
-    queryKey: ['reportes', 'cobranza', ubicacion, desde, hasta],
-    queryFn: () => api<ReporteCobranza>('/reportes/cobranza', { params: { ubicacion_id: ubicacion, desde, hasta } }),
+    queryKey: ['reportes', 'cobranza', empresa, ubicacion, desde, hasta],
+    queryFn: () => api<ReporteCobranza>('/reportes/cobranza', { params: { ubicacion_id: ubicacion, empresa_id: empresa, desde, hasta } }),
     placeholderData: (prev) => prev,
   });
   const k = data?.kpis;

@@ -22,7 +22,7 @@ export class AuthService {
   async me(id: string) {
     const u = await this.prisma.usuario.findUniqueOrThrow({
       where: { id },
-      include: { organizacion: true, ubicaciones: { select: { ubicacion: { select: { id: true, nombre: true } } } } },
+      include: { organizacion: true, ubicaciones: { select: { ubicacion: { select: { id: true, nombre: true, empresa: { select: { id: true, nombre: true } } } } } } },
     });
     const total = u.rol === 'SUPER_ADMIN';
     return {

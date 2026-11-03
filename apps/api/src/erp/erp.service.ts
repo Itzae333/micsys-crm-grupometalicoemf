@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@micsys-crm/database';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccesoService } from '../common/acceso.service';
@@ -29,8 +29,41 @@ export class ErpService {
     return { habilitado: this.erp.habilitado };
   }
 
+  // ── Empresas y ubicaciones ──────────────────────────────────────────────
+  /** Empresa local equivalente a una del ERP: por id del ERP, por nombre (la liga) o se crea. */
+  private async asegurarEmpresa(org: string, erpId: string, nombre: string) {
+    const ya = await this.prisma.empresa.findFirst({ where: { organizacion_id: org, erp_empresa_id: erpId } });
+    if (ya) return ya;
+    const porNombre = await this.prisma.empresa.findFirst({
+      where: { organizacion_id: org, erp_empresa_id: null, nombre: { equals: nombre, mode: 'insensitive' } },
+    });
+    if (porNombre) return this.prisma.empresa.update({ where: { id: porNombre.id }, data: { erp_empresa_id: erpId } });
+    return this.prisma.empresa.create({ data: { organizacion_id: org, nombre, erp_empresa_id: erpId } });
+  }
+
+  /** Ubicación local equivalente a una del ERP: existente, ligada por nombre dentro de su empresa, o nueva. */
+  private async asegurarUbicacion(org: string, e: { id: string; nombre: string; tipo?: string | null; empresa_id: string; empresa: string }) {
+    if (!e.empresa_id || !e.empresa) {
+      throw new BadGatewayException('Tu ERP aún no manda la empresa de cada ubicación. Despliega la última versión del ERP e inténtalo de nuevo.');
+    }
+    const ya = await this.prisma.ubicacion.findFirst({ where: { organizacion_id: org, erp_ubicacion_id: e.id } });
+    if (ya) return { ub: ya, creada: false, ligada: false };
+    const emp = await this.asegurarEmpresa(org, e.empresa_id, e.empresa);
+    const porNombre = await this.prisma.ubicacion.findFirst({
+      where: { empresa_id: emp.id, erp_ubicacion_id: null, nombre: { equals: e.nombre, mode: 'insensitive' } },
+    });
+    if (porNombre) {
+      const ub = await this.prisma.ubicacion.update({ where: { id: porNombre.id }, data: { erp_ubicacion_id: e.id } });
+      return { ub, creada: false, ligada: true };
+    }
+    const ub = await this.prisma.ubicacion.create({
+      data: { organizacion_id: org, empresa_id: emp.id, nombre: e.nombre, tipo: e.tipo ?? null, erp_ubicacion_id: e.id },
+    });
+    return { ub, creada: true, ligada: false };
+  }
+
   // ── Ubicaciones ────────────────────────────────────────────────────────
-  /** Ubicaciones del ERP (EMFIMIFAR) y cuál tiene ya su equivalente en el CRM. */
+  /** Ubicaciones del ERP (de todas las empresas que la llave permita) y cuál tiene ya su equivalente en el CRM. */
   async ubicacionesErp(u: AuthUser) {
     const [erp, locales, permitidas] = await Promise.all([
       this.erp.ubicaciones(),
@@ -42,36 +75,29 @@ export class ErpService {
     return permitidas === null ? todas : todas.filter((e) => e.local && permitidas.includes(e.local.id));
   }
 
-  /** Crea en el CRM las ubicaciones del ERP que aún no existen (o liga una existente por nombre). */
+  /** Trae al CRM las empresas y ubicaciones del ERP que aún no existen (o las liga por nombre). */
   async importarUbicaciones(u: AuthUser) {
     const erp = await this.erp.ubicaciones();
-    const locales = await this.prisma.ubicacion.findMany({ where: { organizacion_id: u.organizacion_id } });
+    const empresasAntes = await this.prisma.empresa.count({ where: { organizacion_id: u.organizacion_id } });
     const creadas: string[] = [];
     const ligadas: string[] = [];
     for (const e of erp) {
-      if (locales.some((l) => l.erp_ubicacion_id === e.id)) continue;
-      const porNombre = locales.find((l) => !l.erp_ubicacion_id && l.nombre.toLowerCase() === e.nombre.toLowerCase());
-      if (porNombre) {
-        await this.prisma.ubicacion.update({ where: { id: porNombre.id }, data: { erp_ubicacion_id: e.id } });
-        ligadas.push(e.nombre);
-      } else {
-        await this.prisma.ubicacion.create({
-          data: { organizacion_id: u.organizacion_id, nombre: e.nombre, tipo: e.tipo ?? null, erp_ubicacion_id: e.id },
-        });
-        creadas.push(e.nombre);
-      }
+      const r = await this.asegurarUbicacion(u.organizacion_id, e);
+      if (r.creada) creadas.push(`${e.empresa} · ${e.nombre}`);
+      if (r.ligada) ligadas.push(`${e.empresa} · ${e.nombre}`);
     }
-    return { creadas, ligadas };
+    const empresasDespues = await this.prisma.empresa.count({ where: { organizacion_id: u.organizacion_id } });
+    return { creadas, ligadas, empresas_nuevas: empresasDespues - empresasAntes };
   }
 
   // ── Clientes del ERP (para elegir cuáles guardar) ──────────────────────
-  async clientesErp(u: AuthUser, q: { ubicacion_id?: string; search?: string; page?: string; con_saldo?: string }) {
+  async clientesErp(u: AuthUser, q: { ubicacion_id?: string; empresa_id?: string; search?: string; page?: string; con_saldo?: string }) {
     const page = Number(q.page) || 1;
     const permitidas = await this.acceso.ids(u);
     let r: { total: number; page: number; limit: number; items: ErpCliente[] };
 
     if (permitidas === null) {
-      r = await this.erp.clientes({ ubicacion_id: q.ubicacion_id, search: q.search, page, limit: 50, con_saldo: q.con_saldo === 'true' });
+      r = await this.erp.clientes({ ubicacion_id: q.ubicacion_id, empresa_id: q.empresa_id, search: q.search, page, limit: 50, con_saldo: q.con_saldo === 'true' });
     } else {
       // Solo clientes de las ubicaciones del ERP a las que este usuario tiene acceso
       const locales = await this.prisma.ubicacion.findMany({
@@ -131,7 +157,7 @@ export class ErpService {
       }
       // La ubicación del cliente en el ERP se refleja en el CRM; si no existe aún, se crea.
       let ub = ubicaciones.find((x) => x.erp_ubicacion_id === c.ubicacion_id);
-      // Crear ubicaciones nuevas es cosa del super usuario; los demás solo guardan en las que ya tienen
+      // Crear empresas/ubicaciones nuevas es cosa del super usuario; los demás solo guardan en las que ya tienen
       if (!ub && permitidas !== null) {
         sinAcceso.push(c.id);
         continue;
@@ -141,9 +167,8 @@ export class ErpService {
         continue;
       }
       if (!ub) {
-        ub = await this.prisma.ubicacion.create({
-          data: { organizacion_id: u.organizacion_id, nombre: c.ubicacion, erp_ubicacion_id: c.ubicacion_id },
-        });
+        const r = await this.asegurarUbicacion(u.organizacion_id, { id: c.ubicacion_id, nombre: c.ubicacion, empresa_id: c.empresa_id, empresa: c.empresa });
+        ub = r.ub;
         ubicaciones.push(ub);
       }
       await this.acceso.asegurar(u, ub.id);

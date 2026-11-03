@@ -7,7 +7,8 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { api } from '@/lib/api';
 import { fmtMonto, haceCuanto, nombreCliente, num } from '@/lib/format';
-import { useDebounced, useUbicaciones } from '@/lib/hooks';
+import { useDebounced } from '@/lib/hooks';
+import { FiltroUbicacionChips, useFiltroUbicacion } from '@/components/filtro-ubicacion';
 import type { Cliente } from '@/lib/types';
 import { ClienteDialog } from '@/components/cliente-form';
 import { ErpImportDialog, useErpEstado } from '@/components/erp-import';
@@ -22,26 +23,25 @@ export default function ClientesPage() {
   const toast = useToast();
   const [q, setQ] = useState('');
   const [soloSaldo, setSoloSaldo] = useState(false);
-  const [ubicacion, setUbicacion] = useState('');
   const [origen, setOrigen] = useState('');
   const [page, setPage] = useState(1);
   const [nuevo, setNuevo] = useState(false);
   const [erp, setErp] = useState(false);
   const busqueda = useDebounced(q, 300);
   const erpEstado = useErpEstado();
-  const ubicaciones = useUbicaciones();
+  const f = useFiltroUbicacion();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['clientes', busqueda, soloSaldo, ubicacion, origen, page],
+    queryKey: ['clientes', busqueda, soloSaldo, f.empresa, f.ubicacion, origen, page],
     queryFn: () =>
       api<{ total: number; items: Cliente[]; limit: number }>('/clientes', {
-        params: { q: busqueda, con_saldo: soloSaldo, ubicacion_id: ubicacion, origen, page, limit: 25, activo: true },
+        params: { q: busqueda, con_saldo: soloSaldo, ...f.params, origen, page, limit: 25, activo: true },
       }),
   });
   const paginas = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
 
   const actualizar = useMutation({
-    mutationFn: () => api<{ clientes: number; tickets: number; tickets_abiertos: number; no_encontrados: string[] }>('/erp/clientes/actualizar', { body: { ubicacion_id: ubicacion || undefined } }),
+    mutationFn: () => api<{ clientes: number; tickets: number; tickets_abiertos: number; no_encontrados: string[] }>('/erp/clientes/actualizar', { body: { ubicacion_id: f.ubicacion || undefined } }),
     onSuccess: (r) => {
       if (r.clientes === 0) toast.ok('Aún no hay clientes ligados con el ERP en este filtro.');
       else toast.ok(`Leído del ERP: ${r.clientes} clientes y ${r.tickets} tickets (${r.tickets_abiertos} abiertos). El saldo del CRM no cambió.`);
@@ -85,12 +85,7 @@ export default function ClientesPage() {
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input className="pl-9" placeholder="Buscar por nombre, RFC, teléfono…" value={q} onChange={(e) => { setQ(e.target.value); reset(); }} aria-label="Buscar clientes" />
         </div>
-        <FilterChip label="Ubicación" active={!!ubicacion}>
-          <select className={sel} value={ubicacion} onChange={(e) => { setUbicacion(e.target.value); reset(); }}>
-            <option value="">todas</option>
-            {ubicaciones.data?.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-          </select>
-        </FilterChip>
+        <FiltroUbicacionChips f={f} onChange={reset} />
         {hayErp && (
           <FilterChip label="Origen" active={!!origen}>
             <select className={sel} value={origen} onChange={(e) => { setOrigen(e.target.value); reset(); }}>
@@ -112,7 +107,7 @@ export default function ClientesPage() {
         {isLoading ? (
           <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-11" />)}</div>
         ) : (data?.items.length ?? 0) === 0 ? (
-          <EmptyState title={busqueda || ubicacion || origen ? 'Ningún cliente coincide con los filtros.' : 'Aún no hay clientes.'}>
+          <EmptyState title={busqueda || f.ubicacion || f.empresa || origen ? 'Ningún cliente coincide con los filtros.' : 'Aún no hay clientes.'}>
             {!busqueda && (hayErp ? 'Guarda clientes desde el ERP o registra uno nuevo.' : 'Registra el primero con “Nuevo cliente”.')}
           </EmptyState>
         ) : (
@@ -141,7 +136,7 @@ export default function ClientesPage() {
                           </Link>
                           {c.origen === 'ERP' && <span className="ml-2 rounded-sm bg-info-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-info-text">ERP</span>}
                         </td>
-                        <td className="px-2 text-muted-foreground">{c.ubicacion?.nombre ?? '—'}</td>
+                        <td className="px-2 text-muted-foreground">{c.ubicacion ? (f.variasEmpresas && c.ubicacion.empresa ? `${c.ubicacion.empresa.nombre} · ${c.ubicacion.nombre}` : c.ubicacion.nombre) : '—'}</td>
                         <td className="num px-2 text-muted-foreground">{c.rfc ?? '—'}</td>
                         <td className="num px-2 text-right font-medium">{fmtMonto(crm)}</td>
                         {hayErp && (
@@ -173,7 +168,7 @@ export default function ClientesPage() {
                     <Link href={`/clientes/${c.id}`} className="flex items-start justify-between gap-3 px-4 py-3">
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium">{nombreCliente(c)}</div>
-                        <div className="truncate text-xs text-muted-foreground">{c.ubicacion?.nombre} · {c.rfc ?? c.telefono ?? 'Sin datos'}</div>
+                        <div className="truncate text-xs text-muted-foreground">{c.ubicacion?.empresa && f.variasEmpresas ? `${c.ubicacion.empresa.nombre} · ` : ''}{c.ubicacion?.nombre} · {c.rfc ?? c.telefono ?? 'Sin datos'}</div>
                       </div>
                       <div className="shrink-0 text-right">
                         <div className="num text-sm font-medium">{fmtMonto(crm)}</div>

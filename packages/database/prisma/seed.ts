@@ -18,7 +18,7 @@ async function main() {
   const org = await prisma.organizacion.upsert({
     where: { id: 'org-principal' },
     update: {},
-    create: { id: 'org-principal', nombre: process.env.SEED_ORG_NAME ?? 'EMFIMIFAR' },
+    create: { id: 'org-principal', nombre: process.env.SEED_ORG_NAME ?? 'Grupo Metálico EMF' },
   });
 
   for (const m of MONEDAS) {
@@ -42,7 +42,7 @@ async function main() {
   });
 
   console.log(`Seed OK — super usuario: ${email}`);
-  console.log('Siguiente paso: entra y, en Configuración, trae las ubicaciones del ERP; luego da de alta usuarios en Usuarios.');
+  console.log('Siguiente paso: entra y, en Configuración, trae las empresas y ubicaciones del ERP; luego da de alta usuarios en Usuarios.');
 }
 
 main().finally(() => prisma.$disconnect());

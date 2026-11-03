@@ -163,7 +163,12 @@ export const movimientoSchema = z
     }
   });
 
+export const empresaSchema = z.object({
+  nombre: z.string().trim().min(1, 'El nombre de la empresa es obligatorio'),
+});
+
 export const ubicacionSchema = z.object({
+  empresa_id: z.string({ required_error: 'Elige la empresa' }).min(1, 'Elige la empresa'),
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
   tipo: z.enum(['MATRIZ', 'FABRICA', 'PUNTO_VENTA']).optional().nullable(),
 });

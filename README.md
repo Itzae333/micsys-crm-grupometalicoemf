@@ -30,7 +30,7 @@ Usuario inicial: el **super usuario** `admin@crm.local` (cambia con `SEED_ADMIN_
 entra, trae las ubicaciones del ERP en **Configuración** y da de alta al resto del equipo en **Usuarios**.
 
 ### Usuarios y ubicaciones
-Solo el **super usuario** ve todo, da de alta usuarios y decide a qué ubicaciones de EMFIMIFAR entra cada uno.
+La estructura es **Empresa → Ubicaciones** (las del ERP, más las que se creen a mano). Solo el **super usuario** ve todas las empresas, da de alta usuarios y decide a qué empresas y ubicaciones entra cada uno.
 Cualquier otro rol (Administrador, Operador, Solo consulta) ve únicamente lo que se le asignó: clientes, movimientos, crédito, reportes y
 hasta los clientes del ERP que puede guardar. Los permisos aplican al instante; al desactivar a alguien o cambiarle la contraseña sus sesiones se cierran.
 

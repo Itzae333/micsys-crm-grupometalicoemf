@@ -20,8 +20,8 @@ export class ReportesService {
   ) {}
 
   // ── Crédito: cuántos clientes deben, cuánto, desde cuándo ─────────────
-  async credito(u: AuthUser, q: { ubicacion_id?: string }) {
-    const ub = await this.acceso.filtro(u, q.ubicacion_id);
+  async credito(u: AuthUser, q: { ubicacion_id?: string; empresa_id?: string }) {
+    const ub = await this.acceso.filtro(u, q.ubicacion_id, q.empresa_id);
     const clienteWhere = { organizacion_id: u.organizacion_id, activo: true, ...(ub ? { ubicacion_id: ub } : {}) };
     const ahora = new Date();
 
@@ -39,7 +39,7 @@ export class ReportesService {
               id: true,
               nombre: true,
               razon_social: true,
-              ubicacion: { select: { id: true, nombre: true } },
+              ubicacion: { select: { id: true, nombre: true, empresa: { select: { nombre: true } } } },
               saldos: { where: { moneda: 'MXN' }, select: { saldo: true } },
             },
           },
@@ -82,15 +82,15 @@ export class ReportesService {
     }
 
     // Por ubicación
-    const ubicaciones = new Map<string, { id: string; nombre: string; vinculados: number; con_credito: Set<string>; tickets: number; saldo: number; saldo_erp: number; saldo_crm: number }>();
-    const lugar = (id: string, nombre: string) => {
-      if (!ubicaciones.has(id)) ubicaciones.set(id, { id, nombre, vinculados: 0, con_credito: new Set(), tickets: 0, saldo: 0, saldo_erp: 0, saldo_crm: 0 });
+    const ubicaciones = new Map<string, { id: string; nombre: string; empresa: string; vinculados: number; con_credito: Set<string>; tickets: number; saldo: number; saldo_erp: number; saldo_crm: number }>();
+    const lugar = (id: string, nombre: string, empresa = '') => {
+      if (!ubicaciones.has(id)) ubicaciones.set(id, { id, nombre, empresa, vinculados: 0, con_credito: new Set(), tickets: 0, saldo: 0, saldo_erp: 0, saldo_crm: 0 });
       return ubicaciones.get(id)!;
     };
     const nombreUb = new Map<string, string>();
     for (const l of links) {
       nombreUb.set(l.cliente.ubicacion.id, l.cliente.ubicacion.nombre);
-      const x = lugar(l.cliente.ubicacion.id, l.cliente.ubicacion.nombre);
+      const x = lugar(l.cliente.ubicacion.id, l.cliente.ubicacion.nombre, l.cliente.ubicacion.empresa.nombre);
       x.vinculados++;
       x.saldo_erp += num(l.saldo_erp);
       x.saldo_crm += num(l.cliente.saldos[0]?.saldo);
@@ -159,6 +159,7 @@ export class ReportesService {
         .map((x) => ({
           id: x.id,
           nombre: x.nombre,
+          empresa: x.empresa,
           vinculados: x.vinculados,
           con_credito: x.con_credito.size,
           tickets: x.tickets,
@@ -174,8 +175,8 @@ export class ReportesService {
   }
 
   // ── Cobranza: cuántos abonos, de quiénes, a dónde cayeron ─────────────
-  async cobranza(u: AuthUser, q: { ubicacion_id?: string; desde?: string; hasta?: string }) {
-    const ub = await this.acceso.filtro(u, q.ubicacion_id);
+  async cobranza(u: AuthUser, q: { ubicacion_id?: string; empresa_id?: string; desde?: string; hasta?: string }) {
+    const ub = await this.acceso.filtro(u, q.ubicacion_id, q.empresa_id);
     const desde = q.desde ? inicioDiaMx(parseFecha(q.desde.slice(0, 10))) : inicioMesMx();
     const hastaExcl = q.hasta ? sumarDias(inicioDiaMx(parseFecha(q.hasta.slice(0, 10))), 1) : sumarDias(inicioDiaMx(), 1);
     const base: Prisma.MovimientoWhereInput = {
@@ -296,12 +297,12 @@ export class ReportesController {
   constructor(private svc: ReportesService) {}
 
   @Get('credito')
-  credito(@CurrentUser() u: AuthUser, @Query() q: { ubicacion_id?: string }) {
+  credito(@CurrentUser() u: AuthUser, @Query() q: { ubicacion_id?: string; empresa_id?: string }) {
     return this.svc.credito(u, q);
   }
 
   @Get('cobranza')
-  cobranza(@CurrentUser() u: AuthUser, @Query() q: { ubicacion_id?: string; desde?: string; hasta?: string }) {
+  cobranza(@CurrentUser() u: AuthUser, @Query() q: { ubicacion_id?: string; empresa_id?: string; desde?: string; hasta?: string }) {
     return this.svc.cobranza(u, q);
   }
 }

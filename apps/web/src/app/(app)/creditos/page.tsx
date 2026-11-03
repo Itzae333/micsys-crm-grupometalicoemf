@@ -5,7 +5,8 @@ import { Download, RefreshCw, Search } from 'lucide-react';
 import { useState } from 'react';
 import { api, descargar } from '@/lib/api';
 import { formatMoney } from '@/lib/format';
-import { useDebounced, useUbicaciones } from '@/lib/hooks';
+import { useDebounced } from '@/lib/hooks';
+import { FiltroUbicacionChips, useFiltroUbicacion } from '@/components/filtro-ubicacion';
 import type { TicketsPage } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useErpEstado } from '@/components/erp-import';
@@ -26,22 +27,21 @@ export default function CreditosPage() {
   const toast = useToast();
   const qc = useQueryClient();
   const [estado, setEstado] = useState<(typeof ESTADOS)[number]['v']>('abiertos');
-  const [ubicacion, setUbicacion] = useState('');
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
   const busqueda = useDebounced(q.trim(), 300);
-  const ubicaciones = useUbicaciones();
+  const f = useFiltroUbicacion();
   const erp = useErpEstado();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['creditos', estado, ubicacion, busqueda, page],
-    queryFn: () => api<TicketsPage>('/creditos/tickets', { params: { estado, ubicacion_id: ubicacion, q: busqueda, page, limit: 25 } }),
+    queryKey: ['creditos', estado, f.empresa, f.ubicacion, busqueda, page],
+    queryFn: () => api<TicketsPage>('/creditos/tickets', { params: { estado, ...f.params, q: busqueda, page, limit: 25 } }),
     placeholderData: (prev) => prev,
   });
   const paginas = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
 
   const actualizar = useMutation({
-    mutationFn: () => api<{ clientes: number; tickets: number; tickets_abiertos: number }>('/erp/clientes/actualizar', { body: { ubicacion_id: ubicacion || undefined } }),
+    mutationFn: () => api<{ clientes: number; tickets: number; tickets_abiertos: number }>('/erp/clientes/actualizar', { body: { ubicacion_id: f.ubicacion || undefined } }),
     onSuccess: (r) => {
       toast.ok(r.clientes === 0 ? 'No hay clientes ligados con el ERP en este filtro.' : `Leído del ERP: ${r.clientes} clientes y ${r.tickets} tickets (${r.tickets_abiertos} con saldo).`);
       for (const k of ['creditos', 'clientes', 'cliente', 'reportes']) qc.invalidateQueries({ queryKey: [k] });
@@ -58,7 +58,7 @@ export default function CreditosPage() {
         subtitle="Tickets a crédito de los clientes que guardaste del ERP, y cómo va cada monto."
         actions={
           <>
-            <Button variant="outline" onClick={() => descargar('/creditos/tickets.csv', { estado, ubicacion_id: ubicacion, q: busqueda }, 'creditos.csv').catch((e: Error) => toast.error(e.message))}>
+            <Button variant="outline" onClick={() => descargar('/creditos/tickets.csv', { estado, ...f.params, q: busqueda }, 'creditos.csv').catch((e: Error) => toast.error(e.message))}>
               <Download className="size-4" strokeWidth={1.75} />
               Exportar CSV
             </Button>
@@ -109,12 +109,7 @@ export default function CreditosPage() {
             </button>
           ))}
         </div>
-        <FilterChip label="Ubicación" active={!!ubicacion}>
-          <select className={sel} value={ubicacion} onChange={(e) => { setUbicacion(e.target.value); setPage(1); }}>
-            <option value="">todas</option>
-            {ubicaciones.data?.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-          </select>
-        </FilterChip>
+        <FiltroUbicacionChips f={f} onChange={() => setPage(1)} />
         <div className="relative min-w-[200px] flex-1 sm:max-w-[280px]">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input className="h-8 pl-9 text-[13px] max-md:h-10" placeholder="Cliente o folio…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} aria-label="Buscar tickets" />
@@ -127,7 +122,7 @@ export default function CreditosPage() {
         {isLoading ? (
           <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12" />)}</div>
         ) : data!.items.length === 0 ? (
-          <EmptyState title={busqueda || ubicacion ? 'Ningún ticket coincide con los filtros.' : estado === 'abiertos' ? 'No hay ventas a crédito con saldo.' : estado === 'reabiertas' ? 'No hay ventas reabiertas.' : 'No hay ventas con este estatus.'}>
+          <EmptyState title={busqueda || f.ubicacion || f.empresa ? 'Ningún ticket coincide con los filtros.' : estado === 'abiertos' ? 'No hay ventas a crédito con saldo.' : estado === 'reabiertas' ? 'No hay ventas reabiertas.' : 'No hay ventas con este estatus.'}>
             {!busqueda && 'Guarda clientes del ERP desde Clientes y usa “Actualizar desde el ERP” para leer sus tickets.'}
           </EmptyState>
         ) : (

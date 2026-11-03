@@ -1,11 +1,11 @@
 # Integración CRM ↔ ERP (API con API key, solo lectura)
 
 El CRM **nunca escribe** en el ERP ni toca su base de datos: lee por HTTP con una API key de servicio.
-Alcance: **solo la empresa EMFIMIFAR** y sus ubicaciones. Los clientes van por ubicación, igual que en el ERP.
+Alcance: las **empresas que el ERP exponga** (variable `INTEGRACION_EMPRESAS`, por defecto solo EMFIMIFAR) con sus ubicaciones. Los clientes van por ubicación, igual que en el ERP.
 
 ## Cómo se usa (flujo del usuario)
 
-1. **Configuración → Traer ubicaciones del ERP** (o crearlas a mano). Al guardar un cliente, su ubicación se crea sola si falta.
+1. **Configuración → Traer empresas y ubicaciones del ERP** (o crearlas a mano; también se pueden crear empresas que no estén en el ERP). Al guardar un cliente, su empresa y su ubicación se crean solas si faltan.
 2. **Clientes → Guardar clientes del ERP**: se elige ubicación/búsqueda, se marcan hasta 100 clientes y se guardan.
    Quedan en el CRM con **saldo $0.00**. El saldo del ERP se guarda aparte como *foto* (`ErpLink.saldo_erp`).
    Al guardarlos también se leen sus tickets a crédito.
@@ -28,11 +28,12 @@ Todo movimiento deja registro: abonos, cobros, cargos, sincronizaciones y cancel
 | Variable (ERP) | Valor |
 |---|---|
 | `INTEGRACION_API_KEY` | Obligatoria, mínimo 24 caracteres. `openssl rand -base64 36` |
-| `INTEGRACION_EMPRESA` | Opcional. Nombre de la empresa expuesta. Por defecto `EMFIMIFAR` |
+| `INTEGRACION_EMPRESAS` | Empresas expuestas: nombres separados por coma (`EMFIMIFAR,Metálicos Lyeva`) o `*` para todas las activas. **Sin definir, solo `EMFIMIFAR`**: ampliar lo que la llave puede leer es una decisión explícita. Cambiarla requiere reiniciar el ERP |
 
 | Endpoint | Para qué |
 |---|---|
-| `GET /api/v1/integracion/ubicaciones` | Ubicaciones activas de la empresa |
+| `GET /api/v1/integracion/empresas` | Empresas que la llave puede leer |
+| `GET /api/v1/integracion/ubicaciones` | Ubicaciones activas de esas empresas, cada una con su empresa |
 | `GET /api/v1/integracion/clientes?ubicacion_id=&search=&page=&limit=&con_saldo=&ids=` | Clientes (excluye `MOSTRADOR`). `ids` = hasta 100 separados por coma |
 | `GET /api/v1/integracion/clientes/saldos?ids=a,b,c` | Saldo y límite de crédito de hasta 200 clientes |
 | `GET /api/v1/integracion/tickets?cliente_ids=a,b,c&estatus=abiertos\|todos` | Tickets a crédito de hasta 100 clientes |
@@ -88,7 +89,7 @@ Si el ERP no responde, el CRM sigue funcionando (movimientos manuales y lo últi
 - **Saldo sin venta que lo respalde:** hay clientes con saldo en el ERP sin ninguna venta a crédito abierta (saldos iniciales o ajustes, sin movimientos de cuenta). El CRM no lo oculta ni lo cuadra: lo desglosa en la ficha del cliente y en Reportes → Crédito.
 
 ## Modelo de datos (CRM)
-- `Ubicacion` (con `erp_ubicacion_id`), `Cliente.ubicacion_id`, `UsuarioUbicacion` (alcance de cada usuario; ADMIN ve todas).
+- `Empresa` (con `erp_empresa_id`, nula si solo existe en el CRM) → `Ubicacion` (con `erp_ubicacion_id`; el nombre es único dentro de su empresa, así que dos empresas pueden tener su “Matriz”), `Cliente.ubicacion_id`, `UsuarioUbicacion` (alcance de cada usuario; ADMIN ve todas).
 - `ErpLink`: cliente CRM ↔ cliente ERP, `saldo_erp` (foto), `saldo_erp_at`, `saldo_sincronizado_at`, `tickets_at`.
 - `ErpTicket`: foto de los tickets a crédito (permite listar y reportar sin llamar al ERP cada vez).
 - `Movimiento.tipo = SINCRONIZACION` con `signo` (+1/−1) y `saldo_erp`.

@@ -28,7 +28,7 @@ export class ErpController {
 
   // Clientes del ERP (para elegir)
   @Get('clientes')
-  clientes(@CurrentUser() u: AuthUser, @Query() q: { ubicacion_id?: string; search?: string; page?: string; con_saldo?: string }) {
+  clientes(@CurrentUser() u: AuthUser, @Query() q: { ubicacion_id?: string; empresa_id?: string; search?: string; page?: string; con_saldo?: string }) {
     return this.svc.clientesErp(u, q);
   }
 

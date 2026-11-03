@@ -4,12 +4,16 @@ export interface ErpUbicacion {
   id: string;
   nombre: string;
   tipo?: string | null;
+  empresa_id: string;
+  empresa: string;
 }
 
 export interface ErpCliente {
   id: string;
   ubicacion_id: string;
   ubicacion: string;
+  empresa_id: string;
+  empresa: string;
   nombre: string;
   apellidos: string | null;
   razon_social: string | null;
@@ -187,9 +191,10 @@ export class ErpClient {
     return this.get<ErpUbicacion[]>('ubicaciones');
   }
 
-  clientes(q: { ubicacion_id?: string; search?: string; page?: number; limit?: number; ids?: string[]; con_saldo?: boolean }) {
+  clientes(q: { ubicacion_id?: string; empresa_id?: string; search?: string; page?: number; limit?: number; ids?: string[]; con_saldo?: boolean }) {
     return this.get<{ total: number; page: number; limit: number; items: ErpCliente[] }>('clientes', {
       ubicacion_id: q.ubicacion_id,
+      empresa_id: q.empresa_id,
       search: q.search,
       page: q.page,
       limit: q.limit,

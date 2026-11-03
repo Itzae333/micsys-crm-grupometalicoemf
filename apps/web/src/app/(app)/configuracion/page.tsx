@@ -6,11 +6,11 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { api, clearToken } from '@/lib/api';
 import { fmtFecha, formatMoney, num } from '@/lib/format';
-import { useMe, useMonedas, useUbicaciones } from '@/lib/hooks';
+import { useEmpresas, useMe, useMonedas, useUbicaciones } from '@/lib/hooks';
 import { CurrencyChip } from '@/components/ui/badges';
 import { InstallButton } from '@/components/pwa';
 import { useErpEstado } from '@/components/erp-import';
-import { Button, ErrorNote, Field, Input, PageHeader, Panel, Skeleton } from '@/components/ui/primitives';
+import { Button, ErrorNote, Field, Input, PageHeader, Panel, Select, Skeleton } from '@/components/ui/primitives';
 import { useToast } from '@/components/ui/toast';
 
 export default function ConfiguracionPage() {
@@ -110,7 +110,7 @@ export default function ConfiguracionPage() {
           <div className="mt-3"><ErrorNote error={crearMoneda.error} /></div>
         </Panel>
 
-        <Panel title="Ubicaciones" className="lg:col-span-2">
+        <Panel title="Empresas y ubicaciones" className="lg:col-span-2">
           <UbicacionesPanel erpActivo={!!erp.data?.habilitado} puedeEditar={me.data?.rol === 'SUPER_ADMIN'} />
         </Panel>
 
@@ -154,15 +154,27 @@ export default function ConfiguracionPage() {
 
 function UbicacionesPanel({ erpActivo, puedeEditar }: { erpActivo: boolean; puedeEditar: boolean }) {
   const ubicaciones = useUbicaciones(true);
+  const empresas = useEmpresas();
   const qc = useQueryClient();
   const toast = useToast();
+  const [empresaNueva, setEmpresaNueva] = useState('');
   const [nombre, setNombre] = useState('');
+  const [empresaId, setEmpresaId] = useState('');
 
   const refrescar = () => {
-    for (const k of ['ubicaciones', 'clientes']) qc.invalidateQueries({ queryKey: [k] });
+    for (const k of ['ubicaciones', 'empresas', 'clientes', 'erp-ubicaciones-usuarios']) qc.invalidateQueries({ queryKey: [k] });
   };
+  const crearEmpresa = useMutation({
+    mutationFn: () => api('/empresas', { body: { nombre: empresaNueva } }),
+    onSuccess: () => {
+      toast.ok('Empresa creada. Ahora agrégale sus ubicaciones.');
+      setEmpresaNueva('');
+      refrescar();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
   const crear = useMutation({
-    mutationFn: () => api('/ubicaciones', { body: { nombre } }),
+    mutationFn: () => api('/ubicaciones', { body: { empresa_id: empresaId, nombre } }),
     onSuccess: () => {
       toast.ok('Ubicación creada.');
       setNombre('');
@@ -171,9 +183,13 @@ function UbicacionesPanel({ erpActivo, puedeEditar }: { erpActivo: boolean; pued
     onError: (e: Error) => toast.error(e.message),
   });
   const traer = useMutation({
-    mutationFn: () => api<{ creadas: string[]; ligadas: string[] }>('/erp/ubicaciones/importar', { method: 'POST' }),
+    mutationFn: () => api<{ creadas: string[]; ligadas: string[]; empresas_nuevas: number }>('/erp/ubicaciones/importar', { method: 'POST' }),
     onSuccess: (r) => {
-      toast.ok(r.creadas.length + r.ligadas.length === 0 ? 'Las ubicaciones ya estaban al día.' : `Ubicaciones del ERP: ${r.creadas.length} nuevas, ${r.ligadas.length} ligadas.`);
+      toast.ok(
+        r.creadas.length + r.ligadas.length === 0
+          ? 'Las empresas y ubicaciones ya estaban al día.'
+          : `Del ERP: ${r.empresas_nuevas} empresas nuevas, ${r.creadas.length} ubicaciones nuevas${r.ligadas.length ? `, ${r.ligadas.length} ligadas` : ''}.`,
+      );
       refrescar();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -184,49 +200,104 @@ function UbicacionesPanel({ erpActivo, puedeEditar }: { erpActivo: boolean; pued
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // Ubicaciones agrupadas por empresa (incluye empresas aún sin ubicaciones)
+  const lista = ubicaciones.data ?? [];
+  const grupos = new Map<string, { id: string; nombre: string; ubs: typeof lista }>();
+  for (const e of empresas.data ?? []) grupos.set(e.id, { id: e.id, nombre: e.nombre, ubs: [] });
+  for (const u of lista) {
+    const k = u.empresa?.id ?? 'sin-empresa';
+    if (!grupos.has(k)) grupos.set(k, { id: k, nombre: u.empresa?.nombre ?? 'Sin empresa', ubs: [] });
+    grupos.get(k)!.ubs.push(u);
+  }
+
   return (
     <>
-      <p className="mb-4 text-sm text-muted-foreground">Igual que en el ERP, los clientes y sus movimientos van por ubicación. Al guardar un cliente del ERP, su ubicación se crea sola si no existe.</p>
-      {ubicaciones.isLoading ? (
+      <p className="mb-4 text-sm text-muted-foreground">
+        La estructura es la del ERP: <span className="font-medium text-foreground">empresa → ubicaciones</span>. Los clientes y sus movimientos van por ubicación. Al guardar un cliente del ERP,
+        su empresa y su ubicación se crean solas si no existen.
+      </p>
+      {ubicaciones.isLoading || empresas.isLoading ? (
         <Skeleton className="h-20" />
+      ) : grupos.size === 0 ? (
+        <p className="rounded-md border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+          Aún no hay empresas.{erpActivo ? ' Usa “Traer del ERP” para cargar las empresas y ubicaciones.' : ' Crea la primera abajo.'}
+        </p>
       ) : (
-        <ul className="divide-y rounded-md border">
-          {ubicaciones.data!.map((u) => (
-            <li key={u.id} className={'flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm' + (u.activa === false ? ' opacity-60' : '')}>
-              <div>
-                <div className="font-medium">{u.nombre}</div>
-                <div className="text-xs text-muted-foreground">
-                  {u._count?.clientes ?? 0} clientes{u.erp_ubicacion_id ? ' · ligada al ERP' : ''}
-                  {u.activa === false ? ' · inactiva' : ''}
-                </div>
+        <div className="flex flex-col gap-3">
+          {[...grupos.values()].map((g) => (
+            <div key={g.id} className="rounded-md border">
+              <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
+                <div className="text-sm font-semibold">{g.nombre}</div>
+                <span className="text-xs text-muted-foreground">{g.ubs.length} {g.ubs.length === 1 ? 'ubicación' : 'ubicaciones'}</span>
               </div>
-              {puedeEditar && (
-                <Button size="sm" variant="ghost" onClick={() => estado.mutate({ id: u.id, activa: u.activa === false })}>
-                  {u.activa === false ? 'Reactivar' : 'Desactivar'}
-                </Button>
+              {g.ubs.length === 0 ? (
+                <p className="px-4 py-3 text-sm text-muted-foreground">Sin ubicaciones todavía.</p>
+              ) : (
+                <ul className="divide-y">
+                  {g.ubs.map((u) => (
+                    <li key={u.id} className={'flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-sm' + (u.activa === false ? ' opacity-60' : '')}>
+                      <div>
+                        <div className="font-medium">{u.nombre}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {u._count?.clientes ?? 0} clientes{u.erp_ubicacion_id ? ' · del ERP' : ' · solo en el CRM'}
+                          {u.activa === false ? ' · inactiva' : ''}
+                        </div>
+                      </div>
+                      {puedeEditar && (
+                        <Button size="sm" variant="ghost" onClick={() => estado.mutate({ id: u.id, activa: u.activa === false })}>
+                          {u.activa === false ? 'Reactivar' : 'Desactivar'}
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               )}
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
-      {!puedeEditar && <p className="mt-3 text-xs text-muted-foreground">Solo el super usuario puede crear o cambiar ubicaciones. Aquí ves las que tienes asignadas.</p>}
-      {puedeEditar && <form
-        className="mt-4 flex flex-wrap items-end gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (nombre.trim()) crear.mutate();
-        }}
-      >
-        <Field label="Nueva ubicación" className="min-w-[220px] flex-1 sm:max-w-xs">
-          <Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="PV Centro" />
-        </Field>
-        <Button type="submit" variant="outline" loading={crear.isPending} disabled={!nombre.trim()}>Agregar</Button>
-        {erpActivo && (
-          <Button type="button" variant="outline" loading={traer.isPending} onClick={() => traer.mutate()}>
-            Traer ubicaciones del ERP
-          </Button>
-        )}
-      </form>}
+      {!puedeEditar && <p className="mt-3 text-xs text-muted-foreground">Solo el super usuario puede crear o cambiar empresas y ubicaciones. Aquí ves las que tienes asignadas.</p>}
+      {puedeEditar && (
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <form
+            className="flex flex-wrap items-end gap-3 rounded-md border p-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (empresaNueva.trim()) crearEmpresa.mutate();
+            }}
+          >
+            <Field label="Nueva empresa" hint="Para empresas que no están en el ERP." className="min-w-[200px] flex-1">
+              <Input value={empresaNueva} onChange={(e) => setEmpresaNueva(e.target.value)} placeholder="Nombre de la empresa" />
+            </Field>
+            <Button type="submit" variant="outline" loading={crearEmpresa.isPending} disabled={!empresaNueva.trim()}>Agregar empresa</Button>
+          </form>
+          <form
+            className="flex flex-wrap items-end gap-3 rounded-md border p-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (nombre.trim() && empresaId) crear.mutate();
+            }}
+          >
+            <Field label="Empresa" className="min-w-[150px] flex-1">
+              <Select value={empresaId} onChange={(e) => setEmpresaId(e.target.value)}>
+                <option value="">Elige…</option>
+                {empresas.data?.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+              </Select>
+            </Field>
+            <Field label="Nueva ubicación" className="min-w-[150px] flex-1">
+              <Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="PV Centro" />
+            </Field>
+            <Button type="submit" variant="outline" loading={crear.isPending} disabled={!nombre.trim() || !empresaId}>Agregar</Button>
+          </form>
+          {erpActivo && (
+            <div className="lg:col-span-2">
+              <Button type="button" variant="outline" loading={traer.isPending} onClick={() => traer.mutate()}>
+                Traer empresas y ubicaciones del ERP
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
     </>
   );
 }

@@ -22,7 +22,7 @@ Servicio desde este repo; Root Directory vacío. El [railway.json](../railway.js
 | `ERP_INTEGRATION_ENABLED` / `ERP_API_URL` / `ERP_API_KEY` | integración con el ERP (ver [INTEGRACION-ERP.md](INTEGRACION-ERP.md)). La llave debe ser la misma que `INTEGRACION_API_KEY` del ERP |
 
 ## 2.1 ERP (Railway, servicio existente)
-Agrega `INTEGRACION_API_KEY` (mínimo 24 caracteres; `openssl rand -base64 36`) para activar `/api/v1/integracion/*`. Sin ella el módulo responde 503. `INTEGRACION_EMPRESA` es opcional (por defecto `EMFIMIFAR`).
+Agrega `INTEGRACION_API_KEY` (mínimo 24 caracteres; `openssl rand -base64 36`) para activar `/api/v1/integracion/*`. Sin ella el módulo responde 503. `INTEGRACION_EMPRESAS` define qué empresas puede leer el CRM: `*` para todas, o una lista (`EMFIMIFAR,Metálicos Lyeva`). Sin ella solo se expone EMFIMIFAR.
 
 ## 3. Web (Vercel)
 Root Directory `apps/web`; usa [vercel.json](../vercel.json). Variable: `NEXT_PUBLIC_API_URL = https://<api>.railway.app/api/v1`.

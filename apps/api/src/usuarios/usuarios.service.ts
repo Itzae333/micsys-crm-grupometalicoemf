@@ -15,7 +15,7 @@ const SELECT = {
   activo: true,
   ultimo_acceso: true,
   created_at: true,
-  ubicaciones: { select: { ubicacion: { select: { id: true, nombre: true } } } },
+  ubicaciones: { select: { ubicacion: { select: { id: true, nombre: true, empresa: { select: { id: true, nombre: true } } } } } },
 } as const;
 
 type Fila = {
@@ -27,7 +27,7 @@ type Fila = {
   activo: boolean;
   ultimo_acceso: Date | null;
   created_at: Date;
-  ubicaciones: { ubicacion: { id: string; nombre: string } }[];
+  ubicaciones: { ubicacion: { id: string; nombre: string; empresa: { id: string; nombre: string } } }[];
 };
 
 /** Alta y administración de usuarios. Solo el super usuario. */

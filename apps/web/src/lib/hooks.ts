@@ -3,9 +3,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { api } from './api';
-import type { CuentaDestino, Ejecutivo, Me, Moneda, Ubicacion } from './types';
+import type { CuentaDestino, Ejecutivo, Empresa, Me, Moneda, Ubicacion } from './types';
 
 export const useMe = () => useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/auth/me'), staleTime: 60_000 });
+export const useEmpresas = () =>
+  useQuery({ queryKey: ['empresas'], queryFn: () => api<Empresa[]>('/empresas'), staleTime: 60_000 });
 export const useUbicaciones = (todas = false) =>
   useQuery({
     queryKey: ['ubicaciones', todas],

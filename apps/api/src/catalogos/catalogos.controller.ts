@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
-import { cuentaDestinoSchema, ejecutivoSchema, tipoCambioSchema, ubicacionSchema } from '@micsys-crm/shared';
+import { cuentaDestinoSchema, ejecutivoSchema, empresaSchema, tipoCambioSchema, ubicacionSchema } from '@micsys-crm/shared';
 import type { CuentaDestinoInput, EjecutivoInput } from '@micsys-crm/shared';
 import { CurrentUser, Roles, ZodPipe } from '../common/auth';
 import type { AuthUser } from '../common/auth';
@@ -9,6 +9,22 @@ import { CatalogosService } from './catalogos.service';
 export class CatalogosController {
   constructor(private svc: CatalogosService) {}
 
+  // Empresas
+  @Get('empresas')
+  empresas(@CurrentUser() u: AuthUser) {
+    return this.svc.empresas(u);
+  }
+  @Post('empresas')
+  @Roles('SUPER_ADMIN')
+  crearEmpresa(@CurrentUser() u: AuthUser, @Body(new ZodPipe(empresaSchema)) dto: { nombre: string }) {
+    return this.svc.crearEmpresa(u, dto);
+  }
+  @Put('empresas/:id')
+  @Roles('SUPER_ADMIN')
+  actualizarEmpresa(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: { nombre?: string; activa?: boolean }) {
+    return this.svc.actualizarEmpresa(u, id, dto);
+  }
+
   // Ubicaciones
   @Get('ubicaciones')
   ubicaciones(@CurrentUser() u: AuthUser, @Query('todas') todas?: string) {
@@ -16,7 +32,7 @@ export class CatalogosController {
   }
   @Post('ubicaciones')
   @Roles('SUPER_ADMIN')
-  crearUbicacion(@CurrentUser() u: AuthUser, @Body(new ZodPipe(ubicacionSchema)) dto: { nombre: string; tipo?: string | null }) {
+  crearUbicacion(@CurrentUser() u: AuthUser, @Body(new ZodPipe(ubicacionSchema)) dto: { empresa_id: string; nombre: string; tipo?: string | null }) {
     return this.svc.crearUbicacion(u, dto);
   }
   @Put('ubicaciones/:id')
