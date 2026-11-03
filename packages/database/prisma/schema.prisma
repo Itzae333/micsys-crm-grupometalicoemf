@@ -1,0 +1,457 @@
+// CRM Administración — Schema Prisma v0.1.0
+// Un solo workspace hoy (Organizacion), listo para expandir a distribución.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ORGANIZACIÓN Y USUARIOS
+// ─────────────────────────────────────────────────────────────
+
+model Organizacion {
+  id           String   @id @default(cuid())
+  nombre       String
+  moneda_base  String   @default("MXN")
+  config_marca Json? // logo, colores, nombre visible (branding)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  usuarios        Usuario[]
+  clientes        Cliente[]
+  ejecutivos      Ejecutivo[]
+  cuentas_destino CuentaDestino[]
+  monedas         Moneda[]
+  movimientos     Movimiento[]
+  ubicaciones     Ubicacion[]
+
+  @@map("organizaciones")
+}
+
+enum RolUsuario {
+  SUPER_ADMIN
+  ADMIN
+  OPERADOR
+  CONSULTA
+}
+
+model Usuario {
+  id              String     @id @default(cuid())
+  organizacion_id String
+  nombre          String
+  apellidos       String?
+  email           String     @unique
+  password_hash   String
+  rol             RolUsuario @default(ADMIN)
+  activo          Boolean    @default(true)
+  ultimo_acceso   DateTime?
+  // Se incrementa al cerrar todas las sesiones: invalida tokens previos.
+  token_version   Int        @default(0)
+  created_at      DateTime   @default(now())
+  updated_at      DateTime   @updatedAt
+
+  organizacion Organizacion       @relation(fields: [organizacion_id], references: [id])
+  movimientos  Movimiento[]
+  audit_logs   AuditLog[]
+  ubicaciones  UsuarioUbicacion[]
+
+  @@map("usuarios")
+}
+
+// Ubicaciones (Matriz, fábricas, puntos de venta). Misma estructura que el ERP:
+// los clientes y los movimientos van por ubicación.
+model Ubicacion {
+  id               String   @id @default(cuid())
+  organizacion_id  String
+  nombre           String
+  tipo             String? // MATRIZ | FABRICA | PUNTO_VENTA (informativo)
+  erp_ubicacion_id String? // id de la ubicación equivalente en el ERP
+  activa           Boolean  @default(true)
+  created_at       DateTime @default(now())
+
+  organizacion Organizacion       @relation(fields: [organizacion_id], references: [id])
+  clientes     Cliente[]
+  movimientos  Movimiento[]
+  usuarios     UsuarioUbicacion[]
+
+  @@unique([organizacion_id, nombre])
+  @@unique([organizacion_id, erp_ubicacion_id])
+  @@map("ubicaciones")
+}
+
+// Qué ubicaciones ve cada usuario (ADMIN y SUPER_ADMIN ven todas).
+model UsuarioUbicacion {
+  id           String @id @default(cuid())
+  usuario_id   String
+  ubicacion_id String
+
+  usuario   Usuario   @relation(fields: [usuario_id], references: [id])
+  ubicacion Ubicacion @relation(fields: [ubicacion_id], references: [id])
+
+  @@unique([usuario_id, ubicacion_id])
+  @@map("usuario_ubicaciones")
+}
+
+// ─────────────────────────────────────────────────────────────
+// CLIENTES
+// ─────────────────────────────────────────────────────────────
+
+enum OrigenCliente {
+  MANUAL
+  ERP
+}
+
+model Cliente {
+  id              String        @id @default(cuid())
+  organizacion_id String
+  ubicacion_id    String
+  nombre          String
+  apellidos       String?
+  razon_social    String?
+  rfc             String?
+  telefono        String?
+  email           String?
+  direccion       String?
+  notas           String?
+  etiquetas       String[]      @default([])
+  origen          OrigenCliente @default(MANUAL)
+  activo          Boolean       @default(true)
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
+
+  organizacion Organizacion    @relation(fields: [organizacion_id], references: [id])
+  ubicacion    Ubicacion       @relation(fields: [ubicacion_id], references: [id])
+  cuentas      CuentaCliente[]
+  movimientos  Movimiento[]
+  saldos       SaldoCliente[]
+  erp_link     ErpLink?
+  tickets      ErpTicket[]
+
+  @@index([organizacion_id, ubicacion_id, nombre])
+  @@index([organizacion_id, rfc])
+  @@map("clientes")
+}
+
+// Cuentas bancarias del cliente (origen de sus depósitos/transferencias)
+model CuentaCliente {
+  id         String   @id @default(cuid())
+  cliente_id String
+  banco      String
+  clabe      String?
+  numero     String?
+  titular    String?
+  alias      String?
+  activa     Boolean  @default(true)
+  created_at DateTime @default(now())
+
+  cliente     Cliente      @relation(fields: [cliente_id], references: [id])
+  movimientos Movimiento[]
+
+  @@map("cuentas_cliente")
+}
+
+// Vínculo cliente CRM <-> cliente del ERP (solo lectura por API). El saldo del ERP
+// es una foto: el CRM lleva su propio saldo y el usuario decide cuándo igualarlo.
+model ErpLink {
+  id                    String    @id @default(cuid())
+  cliente_id            String    @unique
+  erp_cliente_id        String    @unique
+  erp_ubicacion_id      String
+  saldo_erp             Decimal   @default(0) @db.Decimal(14, 2)
+  limite_credito_erp    Decimal   @default(0) @db.Decimal(14, 2)
+  saldo_erp_at          DateTime? // cuándo se leyó el saldo del ERP
+  saldo_sincronizado_at DateTime? // última vez que el usuario igualó el saldo del CRM al del ERP
+  tickets_at            DateTime? // última lectura de tickets
+  created_at            DateTime  @default(now())
+
+  cliente Cliente @relation(fields: [cliente_id], references: [id])
+
+  @@map("erp_links")
+}
+
+// Foto de los tickets a crédito del ERP (nota de venta a crédito) de clientes vinculados.
+// El ERP es la fuente de verdad; esto permite listar y reportar sin llamar al ERP cada vez.
+model ErpTicket {
+  id               String    @id @default(cuid())
+  cliente_id       String
+  erp_nota_id      String    @unique
+  erp_ubicacion_id String
+  folio            Int
+  fecha            DateTime
+  vence            DateTime?
+  total            Decimal   @db.Decimal(14, 2)
+  pagado           Decimal   @db.Decimal(14, 2)
+  saldo            Decimal   @db.Decimal(14, 2)
+  abierto          Boolean
+  estatus          String
+  abonos_count     Int       @default(0)
+  abonos_monto     Decimal   @default(0) @db.Decimal(14, 2)
+  ultimo_pago_at   DateTime?
+  actualizado_at   DateTime  @default(now())
+
+  cliente Cliente @relation(fields: [cliente_id], references: [id])
+
+  @@index([cliente_id, abierto])
+  @@index([abierto, vence])
+  @@map("erp_tickets")
+}
+
+// ─────────────────────────────────────────────────────────────
+// EJECUTIVOS Y CUENTAS DESTINO (a dónde cayó el dinero)
+// ─────────────────────────────────────────────────────────────
+
+model Ejecutivo {
+  id              String   @id @default(cuid())
+  organizacion_id String
+  nombre          String
+  telefono        String?
+  activo          Boolean  @default(true)
+  created_at      DateTime @default(now())
+
+  organizacion Organizacion    @relation(fields: [organizacion_id], references: [id])
+  cuentas      CuentaDestino[]
+
+  @@map("ejecutivos")
+}
+
+enum TipoCuentaDestino {
+  EMPRESA
+  EJECUTIVO
+}
+
+model CuentaDestino {
+  id              String            @id @default(cuid())
+  organizacion_id String
+  tipo            TipoCuentaDestino
+  ejecutivo_id    String? // obligatorio cuando tipo = EJECUTIVO (validar en servicio)
+  alias           String
+  banco           String
+  clabe           String?
+  numero          String?
+  titular         String?
+  moneda          String            @default("MXN")
+  activa          Boolean           @default(true)
+  fecha_alta      DateTime          @default(now())
+  fecha_baja      DateTime?
+  notas           String?
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
+
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  ejecutivo    Ejecutivo?   @relation(fields: [ejecutivo_id], references: [id])
+  movimientos  Movimiento[]
+
+  @@index([organizacion_id, activa])
+  @@map("cuentas_destino")
+}
+
+// ─────────────────────────────────────────────────────────────
+// DIVISAS
+// ─────────────────────────────────────────────────────────────
+
+model Moneda {
+  id              String  @id @default(cuid())
+  organizacion_id String
+  codigo          String // ISO 4217: MXN, USD, EUR...
+  nombre          String
+  simbolo         String
+  activa          Boolean @default(true)
+
+  organizacion Organizacion @relation(fields: [organizacion_id], references: [id])
+  tipos_cambio TipoCambio[]
+
+  @@unique([organizacion_id, codigo])
+  @@map("monedas")
+}
+
+model TipoCambio {
+  id         String   @id @default(cuid())
+  moneda_id  String
+  fecha      DateTime @db.Date
+  valor      Decimal  @db.Decimal(14, 6) // 1 unidad de la moneda = `valor` MXN
+  fuente     String? // manual, Banxico, etc.
+  created_at DateTime @default(now())
+
+  moneda Moneda @relation(fields: [moneda_id], references: [id])
+
+  @@unique([moneda_id, fecha])
+  @@map("tipos_cambio")
+}
+
+// ─────────────────────────────────────────────────────────────
+// MOVIMIENTOS (núcleo)
+// ─────────────────────────────────────────────────────────────
+
+enum TipoMovimiento {
+  CARGO // aumenta lo que el cliente debe
+  SINCRONIZACION // iguala el saldo del CRM al del ERP (el signo va en `signo`)
+  COBRO
+  ABONO
+  DEPOSITO
+  TRANSFERENCIA
+  RETIRO
+  AJUSTE
+}
+
+enum MetodoMovimiento {
+  EFECTIVO
+  TRANSFERENCIA
+  DEPOSITO
+  CHEQUE
+  OTRO
+}
+
+enum MotivoMovimiento {
+  VENTA // ligado a ventas del ERP (ver MovimientoVentaRef)
+  OTRO // no es de ventas (categoria_otro)
+}
+
+enum EstatusMovimiento {
+  PENDIENTE
+  CONFIRMADO
+  RECHAZADO
+  CANCELADO
+}
+
+model Movimiento {
+  id              String            @id @default(cuid())
+  folio           Int               @default(autoincrement())
+  organizacion_id String
+  ubicacion_id    String
+  cliente_id      String
+  tipo            TipoMovimiento
+  metodo          MetodoMovimiento?
+  motivo          MotivoMovimiento  @default(OTRO)
+  categoria_otro  String?
+  concepto        String
+  referencia      String? // clave de rastreo / referencia bancaria
+
+  cuenta_destino_id String? // a dónde cayó el dinero (obligatoria en ingresos; validar en servicio)
+  cuenta_cliente_id String? // origen (cuenta del cliente)
+
+  moneda        String   @default("MXN")
+  monto         Decimal  @db.Decimal(14, 2)
+  tipo_cambio   Decimal  @default(1) @db.Decimal(14, 6)
+  monto_mxn     Decimal  @db.Decimal(14, 2)
+  saldo_antes   Decimal  @db.Decimal(14, 2)
+  saldo_despues Decimal  @db.Decimal(14, 2)
+  // +1 / -1 solo en AJUSTE y SINCRONIZACION (el resto lo define el tipo)
+  signo         Int      @default(0)
+  // Saldo que tenía el ERP al sincronizar (trazabilidad)
+  saldo_erp     Decimal? @db.Decimal(14, 2)
+
+  fecha_movimiento   DateTime
+  estatus            EstatusMovimiento @default(PENDIENTE)
+  confirmado_at      DateTime?
+  confirmado_por_id  String?
+  motivo_cancelacion String?
+  cancelado_at       DateTime?
+  cancelado_por_id   String?
+
+  usuario_id String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  organizacion   Organizacion         @relation(fields: [organizacion_id], references: [id])
+  ubicacion      Ubicacion            @relation(fields: [ubicacion_id], references: [id])
+  cliente        Cliente              @relation(fields: [cliente_id], references: [id])
+  cuenta_destino CuentaDestino?       @relation(fields: [cuenta_destino_id], references: [id])
+  cuenta_cliente CuentaCliente?       @relation(fields: [cuenta_cliente_id], references: [id])
+  usuario        Usuario              @relation(fields: [usuario_id], references: [id])
+  ventas         MovimientoVentaRef[]
+  comprobantes   Comprobante[]
+  conciliacion   Conciliacion?
+
+  @@index([organizacion_id, cliente_id, fecha_movimiento])
+  @@index([organizacion_id, cuenta_destino_id, fecha_movimiento])
+  @@index([organizacion_id, estatus])
+  @@index([organizacion_id, ubicacion_id, fecha_movimiento])
+  @@map("movimientos")
+}
+
+// Ventas del ERP a las que aplica un movimiento (N:M). No se copia la venta,
+// solo su identificador y folio para consultarla por la API del ERP.
+model MovimientoVentaRef {
+  id             String  @id @default(cuid())
+  movimiento_id  String
+  erp_venta_id   String
+  erp_empresa    String?
+  folio          String?
+  monto_aplicado Decimal @db.Decimal(14, 2)
+  moneda         String  @default("MXN")
+
+  movimiento Movimiento @relation(fields: [movimiento_id], references: [id])
+
+  @@unique([movimiento_id, erp_venta_id])
+  @@index([erp_venta_id])
+  @@map("movimiento_venta_refs")
+}
+
+// Saldo corriente por cliente y por moneda (positivo = el cliente debe)
+model SaldoCliente {
+  id         String   @id @default(cuid())
+  cliente_id String
+  moneda     String
+  saldo      Decimal  @default(0) @db.Decimal(14, 2)
+  updated_at DateTime @updatedAt
+
+  cliente Cliente @relation(fields: [cliente_id], references: [id])
+
+  @@unique([cliente_id, moneda])
+  @@map("saldos_cliente")
+}
+
+model Comprobante {
+  id            String   @id @default(cuid())
+  movimiento_id String
+  nombre        String
+  mime          String
+  tamano        Int
+  storage_key   String // clave en R2/S3 o ruta local
+  subido_por_id String?
+  created_at    DateTime @default(now())
+
+  movimiento Movimiento @relation(fields: [movimiento_id], references: [id])
+
+  @@map("comprobantes")
+}
+
+model Conciliacion {
+  id                       String   @id @default(cuid())
+  movimiento_id            String   @unique
+  conciliado               Boolean  @default(true)
+  referencia_estado_cuenta String?
+  notas                    String?
+  conciliado_por_id        String?
+  conciliado_at            DateTime @default(now())
+
+  movimiento Movimiento @relation(fields: [movimiento_id], references: [id])
+
+  @@map("conciliaciones")
+}
+
+// ─────────────────────────────────────────────────────────────
+// AUDITORÍA
+// ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  usuario_id String?
+  entidad    String
+  entidad_id String
+  accion     String // CREATE | UPDATE | CANCEL | DEACTIVATE ...
+  antes      Json?
+  despues    Json?
+  created_at DateTime @default(now())
+
+  usuario Usuario? @relation(fields: [usuario_id], references: [id])
+
+  @@index([entidad, entidad_id])
+  @@map("audit_logs")
+}

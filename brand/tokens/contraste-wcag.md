@@ -1,0 +1,76 @@
+# Validación de contraste WCAG AA — Cauce
+
+Generado por `tools/build_tokens.py`. Texto ≥ 4.5:1; iconos/indicadores ≥ 3:1.
+
+| Modo | Texto / elemento | Fondo | Ratio | Mínimo | Resultado |
+|---|---|---|---|---|---|
+| light | `foreground` | `background` | 15.32 | 4.5 | OK |
+| light | `foreground` | `card` | 16.44 | 4.5 | OK |
+| light | `muted-foreground` | `background` | 6.49 | 4.5 | OK |
+| light | `muted-foreground` | `card` | 6.96 | 4.5 | OK |
+| light | `muted-foreground` | `muted` | 6.02 | 4.5 | OK |
+| light | `primary-foreground` | `primary` | 8.61 | 4.5 | OK |
+| light | `primary` | `card` | 8.61 | 4.5 | OK |
+| light | `accent-foreground` | `accent` | 9.83 | 4.5 | OK |
+| light | `destructive-foreground` | `destructive` | 5.44 | 4.5 | OK |
+| light | `success-text` | `success-soft` | 7.47 | 4.5 | OK |
+| light | `success-text` | `card` | 8.16 | 4.5 | OK |
+| light | `warning-text` | `warning-soft` | 6.28 | 4.5 | OK |
+| light | `warning-text` | `card` | 6.76 | 4.5 | OK |
+| light | `danger-text` | `danger-soft` | 6.82 | 4.5 | OK |
+| light | `danger-text` | `card` | 7.53 | 4.5 | OK |
+| light | `info-text` | `info-soft` | 7.93 | 4.5 | OK |
+| light | `canceled-text` | `canceled-soft` | 6.02 | 4.5 | OK |
+| light | `income` | `card` | 8.16 | 4.5 | OK |
+| light | `expense` | `card` | 16.44 | 4.5 | OK |
+| light | `company-text` | `company-soft` | 7.84 | 4.5 | OK |
+| light | `executive-text` | `executive-soft` | 7.77 | 4.5 | OK |
+| light | `company-text` | `card` | 8.61 | 4.5 | OK |
+| light | `executive-text` | `card` | 8.65 | 4.5 | OK |
+| light | `currency-base-text` | `currency-base-soft` | 9.83 | 4.5 | OK |
+| light | `currency-fx-text` | `currency-fx-soft` | 8.34 | 4.5 | OK |
+| light | `sidebar-foreground` | `sidebar` | 13.36 | 4.5 | OK |
+| light | `brass-foreground` | `card` | 8.94 | 4.5 | OK |
+| light | `success` | `card` | 4.25 | 3 | OK |
+| light | `warning` | `card` | 3.26 | 3 | OK |
+| light | `danger` | `card` | 5.44 | 3 | OK |
+| light | `info` | `card` | 4.84 | 3 | OK |
+| light | `company` | `card` | 4.83 | 3 | OK |
+| light | `executive` | `card` | 4.87 | 3 | OK |
+| light | `ring` | `card` | 4.83 | 3 | OK |
+| light | `input` | `card` | 1.68 | 1.5 | OK |
+| dark | `foreground` | `background` | 15.74 | 4.5 | OK |
+| dark | `foreground` | `card` | 14.7 | 4.5 | OK |
+| dark | `muted-foreground` | `background` | 6.64 | 4.5 | OK |
+| dark | `muted-foreground` | `card` | 6.2 | 4.5 | OK |
+| dark | `muted-foreground` | `muted` | 5.59 | 4.5 | OK |
+| dark | `primary-foreground` | `primary` | 7.54 | 4.5 | OK |
+| dark | `primary` | `card` | 7.64 | 4.5 | OK |
+| dark | `accent-foreground` | `accent` | 8.8 | 4.5 | OK |
+| dark | `destructive-foreground` | `destructive` | 5.22 | 4.5 | OK |
+| dark | `success-text` | `success-soft` | 7.11 | 4.5 | OK |
+| dark | `success-text` | `card` | 8.0 | 4.5 | OK |
+| dark | `warning-text` | `warning-soft` | 7.84 | 4.5 | OK |
+| dark | `warning-text` | `card` | 8.73 | 4.5 | OK |
+| dark | `danger-text` | `danger-soft` | 6.6 | 4.5 | OK |
+| dark | `danger-text` | `card` | 7.07 | 4.5 | OK |
+| dark | `info-text` | `info-soft` | 6.85 | 4.5 | OK |
+| dark | `canceled-text` | `canceled-soft` | 5.45 | 4.5 | OK |
+| dark | `income` | `card` | 8.0 | 4.5 | OK |
+| dark | `expense` | `card` | 14.7 | 4.5 | OK |
+| dark | `company-text` | `company-soft` | 6.69 | 4.5 | OK |
+| dark | `executive-text` | `executive-soft` | 7.22 | 4.5 | OK |
+| dark | `company-text` | `card` | 7.64 | 4.5 | OK |
+| dark | `executive-text` | `card` | 7.65 | 4.5 | OK |
+| dark | `currency-base-text` | `currency-base-soft` | 9.35 | 4.5 | OK |
+| dark | `currency-fx-text` | `currency-fx-soft` | 10.54 | 4.5 | OK |
+| dark | `sidebar-foreground` | `sidebar` | 15.14 | 4.5 | OK |
+| dark | `brass-foreground` | `card` | 11.78 | 4.5 | OK |
+| dark | `success` | `card` | 5.65 | 3 | OK |
+| dark | `warning` | `card` | 6.85 | 3 | OK |
+| dark | `danger` | `card` | 4.87 | 3 | OK |
+| dark | `info` | `card` | 5.06 | 3 | OK |
+| dark | `company` | `card` | 5.09 | 3 | OK |
+| dark | `executive` | `card` | 5.43 | 3 | OK |
+| dark | `ring` | `card` | 5.09 | 3 | OK |
+| dark | `input` | `card` | 1.66 | 1.5 | OK |
