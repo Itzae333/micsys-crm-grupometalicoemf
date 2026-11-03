@@ -8,7 +8,8 @@ import type { Rol } from '@micsys-crm/shared';
 import { api } from '@/lib/api';
 import { haceCuanto } from '@/lib/format';
 import { useMe, useUbicaciones } from '@/lib/hooks';
-import type { UsuarioFila } from '@/lib/types';
+import type { Ubicacion, UsuarioFila } from '@/lib/types';
+import { useErpEstado } from '@/components/erp-import';
 import { cn } from '@/lib/utils';
 import { Dialog } from '@/components/ui/dialog';
 import { Button, EmptyState, ErrorNote, Field, Input, PageHeader, Panel, Select, Skeleton } from '@/components/ui/primitives';
@@ -201,6 +202,15 @@ function UsuarioDialog({ usuario, yoId, onClose }: { usuario?: UsuarioFila; yoId
   const qc = useQueryClient();
   const toast = useToast();
   const ubicaciones = useUbicaciones();
+  const me = useMe();
+  const erpEstado = useErpEstado();
+  // Ubicaciones de la empresa en el ERP, aunque todavía no se hayan traído al CRM
+  const erpUbs = useQuery({
+    queryKey: ['erp-ubicaciones-usuarios'],
+    queryFn: () => api<{ id: string; nombre: string; local: { id: string } | null }[]>('/erp/ubicaciones'),
+    enabled: !!erpEstado.data?.habilitado,
+    retry: false,
+  });
   const editando = !!usuario;
   const soyYo = usuario?.id === yoId;
   const [f, setF] = useState({
@@ -214,15 +224,33 @@ function UsuarioDialog({ usuario, yoId, onClose }: { usuario?: UsuarioFila; yoId
   const [elegidas, setElegidas] = useState<Set<string>>(new Set(usuario?.ubicaciones.map((x) => x.id) ?? []));
   const [errores, setErrores] = useState<Record<string, string>>({});
 
-  const todas = ubicaciones.data ?? [];
+  // Las del CRM + las del ERP que faltan (clave "erp:<id>": se crean al guardar)
+  const todas = [
+    ...(ubicaciones.data ?? []).map((u) => ({ key: u.id, nombre: u.nombre, delErp: !!u.erp_ubicacion_id, nueva: false })),
+    ...(erpUbs.data ?? []).filter((e) => !e.local).map((e) => ({ key: `erp:${e.id}`, nombre: e.nombre, delErp: true, nueva: true })),
+  ].sort((a, b) => a.nombre.localeCompare(b.nombre));
+  const cargandoUbs = ubicaciones.isLoading || (!!erpEstado.data?.habilitado && erpUbs.isLoading);
   const alternar = (id: string) => setElegidas((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const todasMarcadas = todas.length > 0 && todas.every((u) => elegidas.has(u.id));
+  const todasMarcadas = todas.length > 0 && todas.every((u) => elegidas.has(u.key));
 
   const guardar = useMutation({
-    mutationFn: (body: unknown) => (editando ? api(`/usuarios/${usuario!.id}`, { method: 'PUT', body }) : api('/usuarios', { body })),
+    mutationFn: async (body: { ubicacion_ids: string[] } & Record<string, unknown>) => {
+      let ids = body.ubicacion_ids;
+      if (ids.some((k) => k.startsWith('erp:'))) {
+        // Se traen del ERP las ubicaciones que faltaban y se resuelven a sus ids del CRM
+        await api('/erp/ubicaciones/importar', { method: 'POST' });
+        const locales = await api<Ubicacion[]>('/ubicaciones');
+        ids = ids
+          .map((k) => (k.startsWith('erp:') ? locales.find((l) => l.erp_ubicacion_id === k.slice(4))?.id : k))
+          .filter((x): x is string => !!x);
+        if (ids.length === 0) throw new Error('No se pudieron crear las ubicaciones del ERP. Inténtalo de nuevo.');
+      }
+      const payload = { ...body, ubicacion_ids: ids };
+      return editando ? api(`/usuarios/${usuario!.id}`, { method: 'PUT', body: payload }) : api('/usuarios', { body: payload });
+    },
     onSuccess: () => {
       toast.ok(editando ? 'Usuario actualizado.' : 'Usuario creado. Ya puede iniciar sesión.');
-      qc.invalidateQueries({ queryKey: ['usuarios'] });
+      for (const k of ['usuarios', 'ubicaciones', 'erp-ubicaciones-usuarios']) qc.invalidateQueries({ queryKey: [k] });
       onClose();
     },
   });
@@ -275,29 +303,43 @@ function UsuarioDialog({ usuario, yoId, onClose }: { usuario?: UsuarioFila; yoId
         {f.rol !== 'SUPER_ADMIN' ? (
           <fieldset className="sm:col-span-2">
             <div className="mb-1.5 flex items-center justify-between gap-2">
-              <legend className="text-[13px] font-medium">Ubicaciones a las que puede entrar</legend>
+              <legend className="text-[13px] font-medium">Empresa y ubicaciones a las que puede entrar</legend>
               {todas.length > 1 && (
-                <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => setElegidas(todasMarcadas ? new Set() : new Set(todas.map((u) => u.id)))}>
+                <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => setElegidas(todasMarcadas ? new Set() : new Set(todas.map((u) => u.key)))}>
                   {todasMarcadas ? 'Quitar todas' : 'Marcar todas'}
                 </button>
               )}
             </div>
-            {ubicaciones.isLoading ? (
-              <Skeleton className="h-20" />
+            {cargandoUbs ? (
+              <Skeleton className="h-24" />
             ) : todas.length === 0 ? (
-              <p className="rounded-md bg-warning-soft px-3 py-2 text-sm text-warning-text">Aún no hay ubicaciones. Tráelas del ERP en Configuración.</p>
+              <p className="rounded-md bg-warning-soft px-3 py-2 text-sm text-warning-text">
+                {erpEstado.data?.habilitado ? 'No se encontraron ubicaciones en el ERP.' : 'Aún no hay ubicaciones. Créalas en Configuración.'}
+              </p>
             ) : (
-              <ul className="grid gap-2 sm:grid-cols-2">
-                {todas.map((u) => (
-                  <li key={u.id}>
-                    <label className={cn('flex cursor-pointer items-center gap-2.5 rounded-md border p-2.5 text-sm max-md:min-h-[44px]', elegidas.has(u.id) && 'border-primary bg-accent')}>
-                      <input type="checkbox" checked={elegidas.has(u.id)} onChange={() => alternar(u.id)} className="accent-[hsl(var(--primary))]" />
-                      <Building2 className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />
-                      <span className="truncate">{u.nombre}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
+              <div className="rounded-md border p-3">
+                <div className="mb-2.5 flex items-center gap-2 text-sm font-medium">
+                  <Building2 className="size-4 text-company-text" strokeWidth={1.75} />
+                  {me.data?.organizacion.nombre ?? 'Empresa'}
+                  <span className="text-xs font-normal text-muted-foreground">
+                    · {todas.filter((u) => elegidas.has(u.key)).length} de {todas.length}
+                  </span>
+                </div>
+                <ul className="grid gap-2 sm:grid-cols-2">
+                  {todas.map((u) => (
+                    <li key={u.key}>
+                      <label className={cn('flex cursor-pointer items-center gap-2.5 rounded-md border p-2.5 text-sm max-md:min-h-[44px]', elegidas.has(u.key) && 'border-primary bg-accent')}>
+                        <input type="checkbox" checked={elegidas.has(u.key)} onChange={() => alternar(u.key)} className="accent-[hsl(var(--primary))]" />
+                        <span className="min-w-0 flex-1 truncate">{u.nombre}</span>
+                        {u.delErp && <span className="shrink-0 rounded-sm bg-info-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-info-text">ERP</span>}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                {todas.some((u) => u.nueva && elegidas.has(u.key)) && (
+                  <p className="mt-2 text-xs text-muted-foreground">Las ubicaciones marcadas del ERP se agregan al CRM al guardar.</p>
+                )}
+              </div>
             )}
             {errores.ubicacion_ids && <p className="mt-1.5 text-xs text-danger-text">{errores.ubicacion_ids}</p>}
           </fieldset>
